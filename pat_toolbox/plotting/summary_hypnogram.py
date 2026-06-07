@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,9 +8,31 @@ from matplotlib.ticker import MultipleLocator
 
 from .. import config
 from ..io.aux_events import compute_sleep_timing_from_aux
+from .prv_plot_utils import _plot_sleep_stagegram_on_ax
 
 if TYPE_CHECKING:
     import pandas as pd
+
+
+def _plot_sleep_stagegram_on_axis(
+    ax: Any,
+    edf_base: str,
+    aux_df: Optional["pd.DataFrame"],
+    title: str | None = None,
+    show_stats: bool = True,
+    show_xlabel: bool = True,
+) -> bool:
+    ok = _plot_sleep_stagegram_on_ax(
+        ax=ax,
+        edf_base=edf_base,
+        aux_df=aux_df,
+        show_title=title is None,
+        show_xlabel=show_xlabel,
+        show_stats_box=show_stats,
+    )
+    if ok and title:
+        ax.set_title(title, fontsize=14, pad=12)
+    return ok
 
 
 def _build_sleep_stagegram_figure(
