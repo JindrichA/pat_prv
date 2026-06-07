@@ -1,0 +1,324 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from .. import config
+from .prv_plot_utils import (
+    _add_colored_event_key,
+    _add_mean_median_lines,
+    _add_metric_legend,
+    _add_summary_line,
+    _bin_series_mean_ci,
+    _plot_binned_series_with_support,
+    _overlay_events_on_single_axis_whole_night,
+    _plot_sleep_stagegram_on_ax,
+    _shade_prv_mask_layers,
+)
+from .specs import DEFAULT_EVENT_PLOT_SPEC, EventSpec
+from .utils import _add_exclusion_spans, _shade_masked_regions
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+
+def _build_prv_overview_figure(
+    edf_base: str,
+    t_prv: np.ndarray,
+    prv_clean: np.ndarray,
+    prv_raw: Optional[np.ndarray],
+    aux_df: Optional["pd.DataFrame"],
+    exclusion_zones: List[Tuple[float, float, str]],
+    duration_sec_fallback: float,
+    event_spec: List[EventSpec] = DEFAULT_EVENT_PLOT_SPEC,
+    prv_mask_info: Optional[Dict[str, object]] = None,
+) -> Optional[Any]:
+    if t_prv is None or prv_clean is None or t_prv.size == 0:
+        return None
+    overview_hours = getattr(config, "OVERVIEW_PANEL_HOURS", 2.0)
+    panel_sec = overview_hours * 3600.0
+    duration_prv_sec = float(t_prv[-1]) if float(t_prv[-1]) > 0 else duration_sec_fallback
+    n_panels = max(1, int(np.ceil(duration_prv_sec / panel_sec)))
+
+    fig, axes = plt.subplots(n_panels, 1, figsize=(11.69, 8.27), sharex=False)
+    if n_panels == 1:
+        axes = [axes]
+    fig.suptitle(f"{edf_base} - PRV Overview", fontsize=11, y=0.985)
+    show_raw_debug = bool(getattr(config, "PLOT_SHOW_RAW_DEBUG_OVERLAYS", False))
+    use_raw = show_raw_debug and prv_raw is not None and np.size(prv_raw) == np.size(prv_clean)
+
+    for p, ax in enumerate(axes):
+        start_sec = p * panel_sec
+        end_sec = min((p + 1) * panel_sec, duration_prv_sec)
+        start_h = start_sec / 3600.0
+        end_h = end_sec / 3600.0
+        ax.text(0.01, 0.98, f"{start_h:.2f}-{end_h:.2f} h", transform=ax.transAxes, ha="left", va="top", fontsize=8, bbox=dict(boxstyle="round", facecolor="white", alpha=0.75, edgecolor="none", pad=0.2), zorder=5)
+        ax.set_xlim(start_h, end_h)
+        _add_exclusion_spans(ax, exclusion_zones, start_h, end_h, label_once=True)
+
+        mask = (t_prv >= start_sec) & (t_prv <= end_sec)
+        if np.any(mask):
+            if prv_mask_info is not None:
+                mask_slice: Dict[str, object] = {key: np.asarray(value)[mask] for key, value in prv_mask_info.items() if isinstance(value, np.ndarray) and np.size(value) == np.size(t_prv)}
+                _shade_prv_mask_layers(ax, t_prv[mask], mask_slice)
+
+            th = t_prv[mask] / 3600.0
+            yr = None
+            okr = None
+            if use_raw:
+                yr = np.asarray(prv_raw)[mask]
+                okr = np.isfinite(yr)
+                if np.any(okr):
+                    ax.plot(th, np.ma.masked_invalid(yr), label="Sleep-masked PRV", linewidth=0.5, color="tab:gray", alpha=0.6, zorder=1)
+
+            yc = prv_clean[mask]
+            masked = ~np.isfinite(yc)
+            _shade_masked_regions(ax, t_sec=t_prv[mask], masked=masked, color="0.6", alpha=0.20)
+            okc = np.isfinite(yc)
+            if np.any(okc):
+                ax.plot(th, np.ma.masked_invalid(yc), label="Clean PRV (sleep+event masked)", linewidth=1.2, zorder=2)
+            else:
+                ax.text(0.01, 0.92, "PRV clean: no finite samples (all NaN after masking)", transform=ax.transAxes, fontsize=9, va="top")
+                if yr is not None and okr is not None and np.any(okr):
+                    y0 = float(np.nanmin(yr[okr]))
+                    y1 = float(np.nanmax(yr[okr]))
+                    if np.isfinite(y0) and np.isfinite(y1) and y1 > y0:
+                        m = 0.10 * (y1 - y0)
+                        ax.set_ylim(y0 - m, y1 + m)
+
+        _overlay_events_on_single_axis_whole_night(ax=ax, aux_df=aux_df, start_sec=start_sec, end_sec=end_sec, event_spec=event_spec, show_legend_labels=False, event_style="short")
+        ax.grid(True)
+        ax.set_ylabel("RMSSD [ms]")
+        if p == n_panels - 1:
+            ax.set_xlabel("Time (hours from recording start)")
+        if p == 0:
+            _add_metric_legend(ax, loc="lower right", fontsize=5)
+
+    fig.tight_layout(rect=(0.04, 0.05, 0.98, 0.94))
+    fig.subplots_adjust(hspace=0.22)
+    return fig
+
+
+def _build_prv_tv_metrics_figure(
+    edf_base: str,
+    t_prv: np.ndarray,
+    prv_tv: Dict[str, np.ndarray],
+    exclusion_zones: List[Tuple[float, float, str]],
+    aux_df: Optional["pd.DataFrame"],
+) -> Optional[Any]:
+    if t_prv is None or t_prv.size == 0 or not prv_tv:
+        return None
+    panels: List[dict] = []
+    y_sdnn = prv_tv.get("sdnn_ms", None)
+    if y_sdnn is not None and np.size(y_sdnn) == np.size(t_prv):
+        panels.append({"kind": "single", "key": "sdnn_ms", "ylabel": "SDNN [ms]", "series": [("SDNN", np.asarray(t_prv, dtype=float), np.asarray(y_sdnn, dtype=float), "tab:green")]})
+    t_spectral = prv_tv.get("spectral_t_sec", None)
+    y_lf = prv_tv.get("lf_fixed", None)
+    y_hf = prv_tv.get("hf_fixed", None)
+    lf_hf_series = []
+    if t_spectral is not None and y_lf is not None and np.size(y_lf) == np.size(t_spectral):
+        lf_hf_series.append(("LF", np.asarray(t_spectral, dtype=float), np.asarray(y_lf, dtype=float), "tab:orange"))
+    if t_spectral is not None and y_hf is not None and np.size(y_hf) == np.size(t_spectral):
+        lf_hf_series.append(("HF", np.asarray(t_spectral, dtype=float), np.asarray(y_hf, dtype=float), "tab:blue"))
+    if lf_hf_series:
+        panels.append({"kind": "multi", "key": "lf_hf_power", "ylabel": "LF / HF [ms²] (log10)", "yscale": "log", "series": lf_hf_series})
+    y_ratio = prv_tv.get("lf_hf_fixed", None)
+    if t_spectral is not None and y_ratio is not None and np.size(y_ratio) == np.size(t_spectral):
+        panels.append({"kind": "single", "key": "lf_hf", "ylabel": "LF/HF [-]", "series": [("LF/HF", np.asarray(t_spectral, dtype=float), np.asarray(y_ratio, dtype=float), "tab:purple")]})
+    if not panels:
+        return None
+
+    fig, axes = plt.subplots(len(panels), 1, figsize=(11.69, 8.27), sharex=True)
+    if len(panels) == 1:
+        axes = [axes]
+    tv_win = float(getattr(config, "PRV_WINDOW_SEC", 300.0))
+    spectral_window_sec = float(np.asarray(prv_tv.get("spectral_window_sec", np.array([getattr(config, "PRV_LFHF_FIXED_WINDOW_SEC", 120.0)])), dtype=float)[0])
+    title = f"{edf_base} - PRV TV (RMSSD/SDNN {tv_win/60.0:.1f} min sliding; spectral {spectral_window_sec/60.0:.1f} min fixed)"
+    fig.suptitle(title, fontsize=11, y=0.985)
+
+    t_h = t_prv / 3600.0
+    start_h = float(t_h[0])
+    end_h = float(t_h[-1])
+    start_sec = float(t_prv[0])
+    end_sec = float(t_prv[-1])
+    legend_ax = None
+
+    for ax, panel in zip(axes, panels):
+        _add_exclusion_spans(ax, exclusion_zones, start_h, end_h, label_once=False)
+        plotted_any = False
+        for label, t_plot_sec, y, color in panel["series"]:
+            ok = np.isfinite(y)
+            if not np.any(ok):
+                continue
+            p = np.nanpercentile(y, 99)
+            y_plot = np.clip(y, None, p)
+            min_count = int(getattr(config, "PRV_PLOT_BIN_MIN_COUNT", 3))
+            if panel["key"] in {"lf_hf_power", "lf_hf"}:
+                min_count = int(getattr(config, "PRV_PLOT_SPECTRAL_BIN_MIN_COUNT", min_count))
+            t_bin_h, y_bin, y_ci = _bin_series_mean_ci(
+                np.asarray(t_plot_sec, dtype=float),
+                y_plot,
+                bin_sec=float(getattr(config, "PRV_PLOT_BIN_SEC", 15.0 * 60.0)),
+                min_count=min_count,
+            )
+            okb = np.isfinite(y_bin)
+            if not np.any(okb):
+                continue
+            plotted_any = True
+            _plot_binned_series_with_support(ax, t_bin_h[okb], y_bin[okb], bin_sec=float(getattr(config, "PRV_PLOT_BIN_SEC", 15.0 * 60.0)), color=color, linewidth=1.3, label=label)
+            ax.errorbar(t_bin_h[okb], y_bin[okb], yerr=y_ci[okb], fmt="none", elinewidth=0.9, capsize=2, alpha=0.45, color=color, zorder=2)
+            if panel["kind"] == "single" or panel["key"] == "lf_hf_power":
+                _add_mean_median_lines(ax, y_bin[okb], color=color)
+        ax.relim()
+        ax.autoscale_view()
+        _overlay_events_on_single_axis_whole_night(ax=ax, aux_df=aux_df, start_sec=start_sec, end_sec=end_sec, event_spec=DEFAULT_EVENT_PLOT_SPEC, show_legend_labels=False)
+        ax.set_ylabel(panel["ylabel"])
+        if panel.get("yscale") == "log":
+            ax.set_yscale("log")
+        ax.grid(True)
+        if legend_ax is None and plotted_any:
+            legend_ax = ax
+    if legend_ax is not None:
+        _add_metric_legend(legend_ax, loc="lower right", fontsize=5, include_summary_lines=True, summary_color=panels[0]["series"][0][3])
+    axes[-1].set_xlabel("Time (hours from recording start)")
+    fig.tight_layout(rect=(0.04, 0.05, 0.98, 0.94))
+    fig.subplots_adjust(hspace=0.22)
+    return fig
+
+
+def _build_stagegram_and_prv_tv_figure(
+    edf_base: str,
+    aux_df: Optional["pd.DataFrame"],
+    t_prv: np.ndarray,
+    prv_rmssd: Optional[np.ndarray],
+    prv_tv: Dict[str, np.ndarray],
+    exclusion_zones: List[Tuple[float, float, str]],
+    sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]] = None,
+    event_spec: Optional[List[EventSpec]] = None,
+    prv_mask_info: Optional[Dict[str, object]] = None,
+) -> Optional[Any]:
+    if t_prv is None or t_prv.size == 0:
+        return None
+    if event_spec is None:
+        event_spec = DEFAULT_EVENT_PLOT_SPEC
+
+    panels: List[dict] = []
+    if prv_rmssd is not None and np.size(prv_rmssd) == np.size(t_prv):
+        panels.append({"kind": "single", "key": "rmssd", "ylabel": "RMSSD [ms]", "series": [("RMSSD", t_prv, np.asarray(prv_rmssd, dtype=float), "tab:green")]})
+    y_sdnn = prv_tv.get("sdnn_ms", None) if prv_tv is not None else None
+    if y_sdnn is not None and np.size(y_sdnn) == np.size(t_prv):
+        panels.append({"kind": "single", "key": "sdnn_ms", "ylabel": "SDNN [ms]", "series": [("SDNN", t_prv, np.asarray(y_sdnn, dtype=float), "tab:green")]})
+    t_spectral = prv_tv.get("spectral_t_sec", None) if prv_tv is not None else None
+    y_lf = prv_tv.get("lf_fixed", None) if prv_tv is not None else None
+    y_hf = prv_tv.get("hf_fixed", None) if prv_tv is not None else None
+    lf_hf_series = []
+    if t_spectral is not None and y_lf is not None and np.size(y_lf) == np.size(t_spectral):
+        lf_hf_series.append(("LF", np.asarray(t_spectral, dtype=float), np.asarray(y_lf, dtype=float), "tab:orange"))
+    if t_spectral is not None and y_hf is not None and np.size(y_hf) == np.size(t_spectral):
+        lf_hf_series.append(("HF", np.asarray(t_spectral, dtype=float), np.asarray(y_hf, dtype=float), "tab:blue"))
+    if lf_hf_series:
+        panels.append({"kind": "multi", "key": "lf_hf_power", "ylabel": "LF & HF [ms²] (log10)", "yscale": "log", "series": lf_hf_series})
+    y_ratio = prv_tv.get("lf_hf_fixed", None) if prv_tv is not None else None
+    if t_spectral is not None and y_ratio is not None and np.size(y_ratio) == np.size(t_spectral):
+        panels.append({"kind": "single", "key": "lf_hf", "ylabel": "LF/HF [-]", "series": [("LF/HF", np.asarray(t_spectral, dtype=float), np.asarray(y_ratio, dtype=float), "tab:purple")]})
+
+    nrem_prv_summary = None
+    if isinstance(sleep_combo_summaries, dict):
+        nrem_item = sleep_combo_summaries.get("nrem")
+        if isinstance(nrem_item, dict):
+            summary_obj = nrem_item.get("prv_summary")
+            if isinstance(summary_obj, dict):
+                nrem_prv_summary = summary_obj
+
+    panel_summary_keys = {
+        "rmssd": [("RMSSD", "rmssd_mean")],
+        "sdnn_ms": [("SDNN", "sdnn_mean")],
+        "lf_hf_power": [("LF", "lf"), ("HF", "hf")],
+        "lf_hf": [("LF/HF", "lf_hf")],
+    }
+
+    if not panels:
+        return None
+
+    fig, axes = plt.subplots(1 + len(panels), 1, figsize=(11.69, 8.27), sharex=True, gridspec_kw={"height_ratios": [0.7] + [1.0] * len(panels)})
+    axes = list(np.atleast_1d(axes))
+    ax_stage = axes[0]
+    data_axes = axes[1:]
+
+    plotted_stage = _plot_sleep_stagegram_on_ax(ax=ax_stage, edf_base=edf_base, aux_df=aux_df, show_title=False, show_xlabel=False, show_stats_box=False)
+    if not plotted_stage:
+        ax_stage.text(0.5, 0.5, "Sleep hypnogram unavailable", ha="center", va="center", transform=ax_stage.transAxes, fontsize=11)
+        ax_stage.set_ylabel("Stage")
+        ax_stage.grid(True, axis="x", alpha=0.35)
+
+    tv_win = getattr(config, "PRV_TV_WINDOW_SEC", None)
+    prv_window_sec = float(getattr(config, "PRV_WINDOW_SEC", 300.0))
+    spectral_window_sec = float(np.asarray(prv_tv.get("spectral_window_sec", np.array([getattr(config, "PRV_LFHF_FIXED_WINDOW_SEC", 120.0)])), dtype=float)[0])
+    prv_step_hz = float(getattr(config, "PRV_TARGET_FS_HZ", 1.0))
+    plot_bin_sec = float(getattr(config, "PRV_PLOT_BIN_SEC", 10.0 * 60.0))
+    fig.suptitle(f"{edf_base} - Hypnogram + PRV" if tv_win is None or tv_win <= 0 else f"{edf_base} - Hypnogram + PRV", fontsize=11, y=0.988)
+    step_sec = 1.0 / prv_step_hz if prv_step_hz > 0 else np.nan
+    fig.text(0.5, 0.95, f"PAT-derived PRV from the original 40 Hz PAT waveform; PAT peaks were converted to pulse-to-pulse (PR) intervals.\nRMSSD and SDNN: overlapping {prv_window_sec/60.0:.1f} min windows, advanced every {step_sec:.0f} s, displayed as {plot_bin_sec/60.0:.0f} min binned means with 95% CI. LF, HF, and LF/HF: fixed {spectral_window_sec/60.0:.1f} min windows, likewise displayed as {plot_bin_sec/60.0:.0f} min binned means with 95% CI.\nHypnogram lines mark sleep onset, sleep midpoint, and sleep end; top markers denote active exclusion events.", ha="center", va="top", fontsize=7.5)
+    _add_colored_event_key(fig, event_spec)
+
+    t_h = t_prv / 3600.0
+    start_h = float(t_h[0])
+    end_h = float(t_h[-1])
+    start_sec = float(t_prv[0])
+    end_sec = float(t_prv[-1])
+    ax_stage.set_xlim(start_h, end_h)
+
+    for ax, panel in zip(data_axes, panels):
+        plotted_any = False
+        for label, t_plot_sec, y, color in panel["series"]:
+            ok = np.isfinite(y)
+            if not np.any(ok):
+                continue
+            p = np.nanpercentile(y, 99)
+            y_plot = np.clip(y, None, p)
+            min_count = int(getattr(config, "PRV_PLOT_BIN_MIN_COUNT", 3))
+            if panel["key"] in {"lf_hf_power", "lf_hf"}:
+                min_count = int(getattr(config, "PRV_PLOT_SPECTRAL_BIN_MIN_COUNT", min_count))
+            t_bin_h, y_bin, y_ci = _bin_series_mean_ci(
+                np.asarray(t_plot_sec, dtype=float),
+                y_plot,
+                bin_sec=float(getattr(config, "PRV_PLOT_BIN_SEC", 15.0 * 60.0)),
+                min_count=min_count,
+            )
+            okb = np.isfinite(y_bin)
+            if not np.any(okb):
+                continue
+            plotted_any = True
+            _plot_binned_series_with_support(ax, t_bin_h[okb], y_bin[okb], bin_sec=float(getattr(config, "PRV_PLOT_BIN_SEC", 15.0 * 60.0)), color=color, linewidth=1.3, label=label)
+            ax.errorbar(t_bin_h[okb], y_bin[okb], yerr=y_ci[okb], fmt="none", elinewidth=0.9, capsize=2, alpha=0.45, color=color, zorder=2)
+            summary_key = None
+            for series_label, candidate_key in panel_summary_keys.get(panel["key"], []):
+                if series_label == label:
+                    summary_key = candidate_key
+                    break
+            nrem_value = None if not isinstance(nrem_prv_summary, dict) or summary_key is None else nrem_prv_summary.get(summary_key)
+            _add_summary_line(ax, nrem_value, color=color)
+        ax.relim()
+        ax.autoscale_view()
+        _overlay_events_on_single_axis_whole_night(ax=ax, aux_df=aux_df, start_sec=start_sec, end_sec=end_sec, event_spec=event_spec, show_legend_labels=False, event_style="short")
+        ax.set_xlim(start_h, end_h)
+        ax.set_ylabel(panel["ylabel"])
+        if panel.get("yscale") == "log":
+            ax.set_yscale("log")
+        ax.grid(True, alpha=0.75)
+        if plotted_any:
+            summary_items = None
+            if panel["key"] == "lf_hf_power":
+                summary_items = [
+                    ("LF NREM mean", "tab:orange"),
+                    ("HF NREM mean", "tab:blue"),
+                ]
+            _add_metric_legend(ax, loc="lower right", fontsize=6, include_summary_lines=plotted_any, summary_color=panel["series"][0][3], summary_items=summary_items, include_median_line=False)
+
+    if data_axes:
+        data_axes[-1].set_xlabel("Time (hours from recording start)")
+    fig.tight_layout(rect=(0.04, 0.05, 0.98, 0.88))
+    fig.subplots_adjust(hspace=0.22)
+    return fig
