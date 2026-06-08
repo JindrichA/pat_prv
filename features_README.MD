@@ -18,7 +18,6 @@ The main feature switches live in `pat_toolbox/config.py` under `FEATURES`.
 
 - `hr`: PAT-derived heart-rate series and HR summary outputs.
 - `prv`: RMSSD, SDNN, LF, HF, LF/HF, PRV plots, PRV CSV, and PRV summary fields.
-- `psd`: optional PR/tachogram spectral feature calculation and PSD report pages.
 - `sleep_combo_summary`: repeated summaries across predefined sleep subsets.
 - `report_pdf`: the main multi-page report PDF.
 - `peaks_debug_pdf`: optional PAT peak-debug PDF.
@@ -33,7 +32,7 @@ Separate from `FEATURES`, `EXPORT_PUBLICATION_PRV_PNG` can export a high-resolut
 4. Convert peaks to PR intervals.
 5. Clean PR intervals.
 6. Apply sleep-stage and event/desaturation masks.
-7. Compute HR, PRV, and optional PSD outputs from the cleaned PR stream.
+7. Compute HR and PRV outputs from the cleaned PR stream.
 
 ## Provenance Terms
 
@@ -80,22 +79,9 @@ Common selected-policy fields include:
 
 The PRV CSV export includes time-aligned RMSSD, SDNN, LF, HF, LF/HF, and mask/provenance columns when available.
 
-## PSD Outputs
-
-When `psd` is enabled, the repository computes PR/tachogram spectral summaries over valid fixed windows.
-
-Common fields include:
-
-- `selected_mayer_peak_hz`
-- `selected_resp_peak_hz`
-- `selected_psd_pow_vlf`
-- `selected_psd_pow_mayer`
-- `selected_psd_pow_resp`
-- `selected_psd_valid_windows`
-
 ## Sleep-Combo Outputs
 
-When `sleep_combo_summary` is enabled, the pipeline recomputes HR/PRV/PSD summaries for fixed subsets such as:
+When `sleep_combo_summary` is enabled, the pipeline recomputes HR/PRV summaries for fixed subsets such as:
 
 - `pre_sleep_wake`
 - `all_sleep`
@@ -120,4 +106,4 @@ Typical outputs for one recording are conditional on the active switches in `pat
 
 ## Current Scope
 
-This version is intentionally focused on PAT-derived HR, PRV, and optional PR/tachogram PSD.
+This version is intentionally focused on PAT-derived HR and PRV.

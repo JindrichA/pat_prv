@@ -76,7 +76,6 @@ def main():
     print(f"VIEW_PAT plotting    : {enable_plots}")
     print(f"HR from PAT          : {enable_hr} (target fs = {config.HR_TARGET_FS_HZ} Hz)")
     print(f"PRV enabled          : {features.is_enabled('prv')}")
-    print(f"PSD enabled          : {features.is_enabled('psd')}")
     print(f"PAT peaks debug PDF  : {enable_peak_debug}")
     print(f"RUN_ID               : {getattr(config, 'RUN_ID', 'default')}")
     print()

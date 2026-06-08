@@ -26,7 +26,6 @@ The current `FEATURES` configuration is:
 
 - `hr = True`
 - `prv = True`
-- `psd = False`
 - `sleep_combo_summary = True`
 - `report_pdf = True`
 - `peaks_debug_pdf = False`
@@ -103,11 +102,10 @@ For each EDF file, the processing order is:
 4. Compute sleep-subset summaries.
 5. Compute PAT-derived HR.
 6. Compute PRV and PR-based summaries.
-7. Compute separate PSD features if enabled.
-8. Export per-feature CSVs.
-9. Build the PDF report.
-10. Optionally export a publication-style PRV PNG for an automatically selected NREM segment.
-11. Append one row to the grouped summary CSV.
+7. Export per-feature CSVs.
+8. Build the PDF report.
+9. Optionally export a publication-style PRV PNG for an automatically selected NREM segment.
+10. Append one row to the grouped summary CSV.
 
 In compact form, the physiological flow is:
 
@@ -414,7 +412,7 @@ For each valid fixed window:
 3. Reject the window if any PR gap exceeds `3.0 s`.
 4. Reject the window if the PR midpoint span is below `96 s`.
 5. Resample the tachogram to `4.0 Hz`.
-6. Compute the PSD using Welch spectral estimation.
+6. Estimate the tachogram spectrum using Welch spectral estimation.
 7. Integrate LF power over `0.04 to 0.15 Hz`.
 8. Integrate HF power over `0.15 to 0.40 Hz`.
 9. Convert both to `ms^2`.
@@ -457,19 +455,6 @@ This plotting choice is meant to preserve the physiological meaning of the estim
 
 This means the spectral plot pages and the spectral summary table now correspond to the same window definition.
 
-## Separate PSD Feature Block
-
-The dedicated `psd` feature is currently disabled:
-
-- `psd = False`
-
-So in the present setup:
-
-- no dedicated PAT PSD pages are generated
-- no separate PSD summary fields are expected in the main output as a run feature
-
-If enabled, that feature would compute averaged PR-based PSDs over the same fixed `120 s` windows and report Mayer-band and respiratory-band power summaries.
-
 ## Sleep Timing And Sleep-Half Analysis
 
 Sleep timing is computed from the auxiliary sleep-stage timeline.
@@ -506,10 +491,6 @@ For each subset, the code can produce:
 - LF mean
 - HF mean
 - LF/HF mean
-
-In the current setup, because `psd` is disabled:
-
-- PSD-window-count columns are absent
 
 ## What “Pre-Final Exclusion” Means
 
@@ -562,6 +543,6 @@ For the current configuration, the main selected-policy PRV workflow can be summ
 11. Combine sleep, event, quality, and gated-desaturation masks into the final selected-policy keep mask.
 12. Derive PAT HR from the cleaned PR stream, interpolate to `1 Hz`, smooth, despike, and apply the final selected-policy mask.
 13. Derive RMSSD and SDNN on `5 min` sliding windows evaluated on a `1 Hz` grid.
-14. Derive LF, HF, and LF/HF on non-overlapping fixed `2 min` windows using PR-tachogram Welch PSD.
+14. Derive LF, HF, and LF/HF on non-overlapping fixed `2 min` windows using Welch spectral estimation on the PR tachogram.
 15. Summarize the surviving values over the selected-policy valid windows.
 16. Recompute the same family of metrics for fixed subsets such as all sleep, NREM, deep, REM, wake+sleep, and pre-sleep wake.

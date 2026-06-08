@@ -15,8 +15,8 @@ def tachogram_psd_from_pr(
     fs_resample: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Compute Welch PSD on a resampled PR tachogram.
-    Returns frequency and linear PSD in sec^2/Hz.
+    Compute Welch spectral density on a resampled PR tachogram.
+    Returns frequency and linear spectral density in sec^2/Hz.
     """
     if pr_ms.size < 4 or pr_mid_times_sec.size < 4:
         return np.array([]), np.array([])
@@ -38,7 +38,7 @@ def tachogram_psd_from_pr(
     if nperseg < 8:
         return np.array([]), np.array([])
 
-    nfft = int(getattr(config, "PSD_TACHO_NFFT", 2048))
+    nfft = int(getattr(config, "TACHO_SPECTRAL_NFFT", 2048))
     nfft = max(nfft, int(nperseg))
 
     f, pxx = welch(

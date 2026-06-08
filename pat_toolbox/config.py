@@ -27,7 +27,7 @@ EDF_FOLDER = Path(
 
 
 # Set to an integer for short debug runs, or keep None to process everything.
-MAX_FILES = 5
+MAX_FILES = None
 
 # RUN_ID is generated automatically at import time.
 RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -41,19 +41,17 @@ RUN_TAG = "RMSSD_times"
 # keep it out of computation, tables, plots, and file outputs.
 # Recommended workflow:
 #   1. decide which features should be part of the run here
-#   2. only then tune the detailed HR / PRV / PSD knobs below
+#   2. only then tune the detailed HR / PRV knobs below
 #
 # In practice:
 #   - hr                  -> PAT-derived heart-rate series and HR summary outputs
 #   - prv                 -> RMSSD/SDNN/LF/HF/LF-HF calculations, PRV plots, PRV CSV
-#   - psd                 -> spectral features and PSD report pages
 #   - sleep_combo_summary -> extra fixed sleep-subset comparison summaries
 #   - report_pdf          -> main multi-page PDF report
 #   - peaks_debug_pdf     -> PAT peak-debug PDF
 FEATURES = {
     "hr": True,
     "prv": True,
-    "psd": False,
     "pwa_drop": False,
     "sleep_combo_summary": True,
     "report_pdf": True,
@@ -85,7 +83,7 @@ def _slug(s: str) -> str:
 # Sleep Stage Mapping And Inclusion Policy
 # =============================================================================
 # These settings decide which sleep stages are considered "included" for PRV,
-# PSD and plotting masks. This is one of the highest-impact
+# plotting masks. This is one of the highest-impact
 # groups in the config because it changes which parts of the night contribute.
 
 # Canonical numeric codes used internally:
@@ -182,7 +180,6 @@ HR_OUTPUT_SUBFOLDER = f"HR__{run_suffix()}"
 PRV_OUTPUT_SUBFOLDER = f"PRV__{run_suffix()}"
 PUBLICATION_PRV_OUTPUT_SUBFOLDER = f"PublicationPRV__{run_suffix()}"
 PWA_DROP_OUTPUT_SUBFOLDER = f"PWADrop__{run_suffix()}"
-PSD_OUTPUT_SUBFOLDER = f"PSD__{run_suffix()}"
 
 
 # =============================================================================
@@ -225,7 +222,7 @@ COL_NAMES: Dict[str, str] = {
 # metrics. If a user wants more or less aggressive masking, this is the first
 # place to inspect.
 
-# Shared exclusion inputs used by HR/PRV/PSD plotting and calculations.
+# Shared exclusion inputs used by HR/PRV plotting and calculations.
 PRV_EXCLUSION_EVENT_COLUMNS = [
     "evt_central_3",
     "evt_obstructive_3",
@@ -410,18 +407,6 @@ PRV_PLOT_BIN_MIN_COUNT = 3
 # a lower minimum valid-count threshold to avoid dropping an otherwise informative
 # early or late bin.
 PRV_PLOT_SPECTRAL_BIN_MIN_COUNT = 1
-
-
-# =============================================================================
-# PSD / Spectral Analysis
-# =============================================================================
-# These bands are used for the PAT/PRV-related PSD summaries. Change them only
-# if you intentionally want different Mayer / respiratory band definitions.
-
-PSD_MAX_FREQ_HZ = 5.0
-PSD_NPERSEG = 4096
-PSD_MAYER_BAND = (0.04, 0.15)
-PSD_RESP_BAND = (0.15, 0.23)
 
 
 # =============================================================================

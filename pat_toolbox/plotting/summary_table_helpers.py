@@ -295,8 +295,6 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
     hr_summary: Dict[str, Any] = hr_summary_obj if isinstance(hr_summary_obj, dict) else {}
     prv_summary_obj = item.get("prv_summary")
     prv_summary: Dict[str, Any] = prv_summary_obj if isinstance(prv_summary_obj, dict) else {}
-    psd_features_obj = item.get("psd_features")
-    psd_features: Dict[str, Any] = psd_features_obj if isinstance(psd_features_obj, dict) else {}
     pwa_drop_obj = item.get("pwa_drop_summary")
     pwa_drop: Dict[str, Any] = pwa_drop_obj if isinstance(pwa_drop_obj, dict) else {}
 
@@ -327,8 +325,6 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
         ])
 
     right: list[str] = []
-    if features.is_enabled("psd"):
-        right.append(_fmt_int(psd_features.get("n_windows")))
     if features.is_enabled("pwa_drop"):
         right.extend([
             _fmt_int(pwa_drop.get("n_drops")),
@@ -353,8 +349,6 @@ def _sleep_combo_tables(sleep_combo_summaries: Optional[Dict[str, Dict[str, obje
         secondary_headers.extend(["SDNN mean", "SDNN med", "RMSSD valid\n[min]", "RMSSD valid\n[%]", "SDNN valid\n[min]", "SDNN valid\n[%]", "LF mean\n[ms^2]", "HF mean\n[ms^2]", "LF/HF mean\n[-]"])
 
     right_headers = ["Subset"]
-    if features.is_enabled("psd"):
-        right_headers.append("PSD win")
     if features.is_enabled("pwa_drop"):
         right_headers.extend(["PWA n", "PWA /h", "PWA amp %"])
 
@@ -547,9 +541,6 @@ def _build_time_series_feature_rows(
 
 def _build_spectral_feature_rows(
     prv_summary: Optional[Dict[str, float]],
-    mayer_peak_freq: Optional[float],
-    resp_peak_freq: Optional[float],
-    psd_features: Optional[Dict[str, float]],
 ) -> List[List[str]]:
     rows: List[List[str]] = []
     if features.is_enabled("prv"):
@@ -559,13 +550,6 @@ def _build_spectral_feature_rows(
         rows += [["Selected-policy spectral parameters", ""], ["  LF mean [ms^2]", _fmt(lf, 2)], ["  HF mean [ms^2]", _fmt(hf, 2)], ["  LF/HF mean [-]", _fmt(lf_hf, 2)]]
         if prv_summary:
             rows += [["  LF median [ms^2]", _fmt(prv_summary.get("lf_fixed_median"), 2)], ["  HF median [ms^2]", _fmt(prv_summary.get("hf_fixed_median"), 2)], ["  LF/HF median [-]", _fmt(prv_summary.get("lf_hf_fixed_median"), 2)], ["  Valid LF/HF windows [n]", _fmt_int(prv_summary.get("lf_hf_fixed_n_windows_valid"))], ["  Total LF/HF windows [n]", _fmt_int(prv_summary.get("lf_hf_fixed_n_windows_total"))], ["  Valid LF/HF [min]", _fmt_num(prv_summary.get("lf_hf_fixed_valid_min"), 1)], ["  Valid LF/HF [%]", _fmt_pct(prv_summary.get("lf_hf_fixed_valid_pct"), 1)], ["  Total LF/HF [min]", _fmt_num(prv_summary.get("lf_hf_fixed_total_min"), 1)], ["  LF/HF window [s]", _fmt(prv_summary.get("lf_hf_fixed_window_sec"), 0)], ["  LF/HF hop [s]", _fmt(prv_summary.get("lf_hf_fixed_hop_sec"), 0)]]
-
-    if features.is_enabled("psd"):
-        if rows:
-            rows += [["", ""]]
-        rows += [["Selected-policy spectral analysis", ""], ["  Mayer peak [Hz]", _fmt(mayer_peak_freq, 3)], ["  Resp peak [Hz]", _fmt(resp_peak_freq, 3)]]
-        if psd_features:
-            rows += [["  PSD mode", str(psd_features.get("psd_mode", "matched"))], ["  VLF power (0.0033–0.04 Hz)", _fmt_sci(psd_features.get("pow_vlf"))], ["  Mayer power (0.04–0.15 Hz)", _fmt_sci(psd_features.get("pow_mayer"))], ["  Resp power (0.15–0.50 Hz)", _fmt_sci(psd_features.get("pow_resp"))], ["  Mayer power (norm)", _fmt_pct(psd_features.get("norm_mayer"), 1)], ["  Resp power (norm)", _fmt_pct(psd_features.get("norm_resp"), 1)], ["  Valid PSD windows", _fmt_int(psd_features.get("n_windows"))], ["  PSD diagnostic", str(psd_features.get("psd_diag_reason", "")) or "ok"]]
     return rows
 
 
@@ -822,8 +806,6 @@ def build_summary_pages(
     spear_rho: Optional[float],
     rmse: Optional[float],
     prv_summary: Optional[Dict[str, float]],
-    mayer_peak_freq: Optional[float],
-    resp_peak_freq: Optional[float],
     aux_df: Optional["pd.DataFrame"],
     *,
     t_hr_calc: Optional[np.ndarray] = None,
@@ -834,7 +816,6 @@ def build_summary_pages(
     prv_clean: Optional[np.ndarray] = None,
     prv_raw: Optional[np.ndarray] = None,
     prv_tv: Optional[Dict[str, np.ndarray]] = None,
-    psd_features: Optional[Dict[str, float]] = None,
     pwa_drop_summary: Optional[Dict[str, float]] = None,
     sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]] = None,
     prv_mask_info: Optional[Dict[str, object]] = None,
@@ -846,7 +827,7 @@ def build_summary_pages(
     t_hr_edf = None
     hr_edf = None
     figs = []
-    has_aux_summary_context = features.any_enabled("prv", "psd", "pwa_drop", "sleep_combo_summary")
+    has_aux_summary_context = features.any_enabled("prv", "pwa_drop", "sleep_combo_summary")
 
     rows_hr_quality, rows_ts_coverage, rows_spectral_coverage = _build_quality_rows(t_hr_calc, hr_calc, t_prv, prv_clean, prv_raw, prv_tv)
 
@@ -860,7 +841,7 @@ def build_summary_pages(
     if rows_ts_coverage:
         figs.append(_render_table_page("Summary (Selected-Policy Time-Series Coverage)", rows_ts_coverage, edf_base=edf_base, font_size=12, scale_y=1.35))
 
-    rows_spectral = _build_spectral_feature_rows(prv_summary, mayer_peak_freq, resp_peak_freq, psd_features)
+    rows_spectral = _build_spectral_feature_rows(prv_summary)
     if rows_spectral:
         figs.append(_render_table_page("Summary (Selected-Policy Spectral Parameters)", rows_spectral, edf_base=edf_base, font_size=12, scale_y=1.35))
 

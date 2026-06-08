@@ -64,9 +64,6 @@ def plot_pat_and_hr_segments_to_pdf(
             duration_sec=duration_sec,
             exclusion_zones=context["exclusion_zones"],
             event_spec=context["event_spec"],
-            psd_features=context["psd_features"],
-            mayer_peak_freq=context["mayer_peak_freq"],
-            resp_peak_freq=context["resp_peak_freq"],
             t_hr_calc=t_hr_calc,
             hr_calc=hr_calc,
             t_prv=t_prv,
@@ -110,12 +107,12 @@ def plot_pat_and_hr_segments_to_pdf(
         pdf_path,
         fig_stage_tv=figures["fig_stage_tv"],
         fig_stage=figures["fig_stage"],
-        fig_psd_zoom=context["fig_psd_zoom"],
-        fig_psd_full=context["fig_psd_full"],
+        fig_psd_zoom=None,
+        fig_psd_full=None,
         fig_ov=figures["fig_ov"],
         overview_figures=figures["overview_figures"],
         summary_pages=figures["summary_pages"],
         segment_kwargs=segment_kwargs,
     )
 
-    return context["psd_features"]
+    return {}

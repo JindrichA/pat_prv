@@ -59,11 +59,6 @@ class RecordingContext:
     t_actigraph: Optional[np.ndarray] = None
     actigraph: Optional[np.ndarray] = None
 
-    # PSD peaks
-    mayer_peak_freq: Optional[float] = None
-    resp_peak_freq: Optional[float] = None
-    psd_features: Optional[Dict[str, float]] = None
-
     # Outputs
     pdf_path: Optional[Path] = None
     hr_csv_path: Optional[Path] = None

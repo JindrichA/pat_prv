@@ -14,8 +14,6 @@ from ..masking import policy_from_config
 def append_hr_prv_summary(
     edf_path: Path,
     prv_summary: Optional[Dict[str, float]] = None,
-    mayer_peak_freq: Optional[float] = None,
-    resp_peak_freq: Optional[float] = None,
     *,
     t_hr: Optional[np.ndarray] = None,
     hr_calc: Optional[np.ndarray] = None,
@@ -27,13 +25,11 @@ def append_hr_prv_summary(
     prv_midpoint_halves: Optional[Dict[str, Dict[str, float]]] = None,
     aux_df: Optional[Any] = None,
     pwa_drop_summary: Optional[Dict[str, float]] = None,
-    psd_features: Optional[Dict[str, float]] = None,
     sleep_combo_summaries: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Path:
     """
     Append one PAT-only summary row with:
       - PRV summary
-      - spectral peaks / PSD features
       - PAT HR / PRV valid coverage
       - aux event counts
       - sleep-stage masking stats
@@ -312,7 +308,7 @@ def append_hr_prv_summary(
 
     summary_folder = paths.get_output_folder(config.HR_OUTPUT_SUBFOLDER)
 
-    summary_parts = features.enabled_feature_parts(("hr", "prv", "psd", "sleep_combo_summary")) or ["SUMMARY"]
+    summary_parts = features.enabled_feature_parts(("hr", "prv", "sleep_combo_summary")) or ["SUMMARY"]
 
     if isinstance(sleep_combo_summaries, dict) and sleep_combo_summaries:
         sleep_stage_policy = "multi_sleep_summary"
@@ -333,11 +329,7 @@ def append_hr_prv_summary(
     active_aux_columns = set(policy_from_config().exclusion_columns)
     if bool(getattr(config, "PRV_EXCLUSION_USE_DESAT_WINDOWS", False)):
         active_aux_columns.add(str(getattr(config, "PRV_EXCLUSION_DESAT_COLUMN_KEY", "desat_flag")))
-    has_aux_summary_context = features.any_enabled("prv", "psd", "sleep_combo_summary")
-
-    if features.is_enabled("psd"):
-        row["selected_mayer_peak_hz"] = mayer_peak_freq
-        row["selected_resp_peak_hz"] = resp_peak_freq
+    has_aux_summary_context = features.any_enabled("prv", "sleep_combo_summary")
 
     if features.is_enabled("prv") and prv_summary is not None:
         row.update(
@@ -383,18 +375,6 @@ def append_hr_prv_summary(
                 "selected_lf_hf_fixed_total_min": np.nan,
                 "selected_lf_hf_fixed_window_sec": np.nan,
                 "selected_lf_hf_fixed_hop_sec": np.nan,
-            }
-        )
-
-    if features.is_enabled("psd") and psd_features:
-        row.update(
-            {
-                "selected_psd_pow_vlf": psd_features.get("pow_vlf"),
-                "selected_psd_pow_mayer": psd_features.get("pow_mayer"),
-                "selected_psd_pow_resp": psd_features.get("pow_resp"),
-                "selected_psd_norm_mayer": psd_features.get("norm_mayer"),
-                "selected_psd_norm_resp": psd_features.get("norm_resp"),
-                "selected_psd_valid_windows": psd_features.get("n_windows"),
             }
         )
 
@@ -570,11 +550,6 @@ def append_hr_prv_summary(
                 ]:
                     row[f"{prefix}_{dst}"] = prv_item.get(src, np.nan)
 
-            psd_item_obj = item.get("psd_features")
-            psd_item: Dict[str, Any] = psd_item_obj if isinstance(psd_item_obj, dict) else {}
-            if features.is_enabled("psd"):
-                row[f"{prefix}_psd_valid_windows"] = psd_item.get("n_windows", np.nan)
-
     base_order = [
         "edf_file",
         "selected_hr_min_bpm", "selected_hr_max_bpm", "selected_hr_mean_bpm", "selected_hr_median_bpm", "selected_hr_std_bpm", "selected_hr_valid_pct", "selected_hr_valid_min",
@@ -588,8 +563,7 @@ def append_hr_prv_summary(
         "prv_tv_lf_final_analysis_valid_pct", "prv_tv_lf_final_analysis_valid_min", "prv_tv_lf_pre_final_exclusion_valid_pct", "prv_tv_lf_pre_final_exclusion_valid_min",
         "prv_tv_hf_final_analysis_valid_pct", "prv_tv_hf_final_analysis_valid_min", "prv_tv_hf_pre_final_exclusion_valid_pct", "prv_tv_hf_pre_final_exclusion_valid_min",
         "prv_tv_lf_hf_final_analysis_valid_pct", "prv_tv_lf_hf_final_analysis_valid_min", "prv_tv_lf_hf_pre_final_exclusion_valid_pct", "prv_tv_lf_hf_pre_final_exclusion_valid_min",
-        "selected_mayer_peak_hz", "selected_resp_peak_hz", "selected_psd_pow_vlf", "selected_psd_pow_mayer", "selected_psd_pow_resp", "selected_psd_norm_mayer",
-        "selected_psd_norm_resp", "selected_psd_valid_windows", "selected_prv_selected_policy_min", "selected_prv_clean_kept_min",
+        "selected_prv_selected_policy_min", "selected_prv_clean_kept_min",
         "selected_prv_clean_kept_pct_of_selected", "selected_prv_mask_excluded_total_min", "selected_prv_mask_excluded_total_pct_of_selected",
         "selected_prv_excluded_apnea_only_min", "selected_prv_excluded_apnea_only_pct_of_selected",
         "selected_prv_excluded_quality_only_min", "selected_prv_excluded_quality_only_pct_of_selected",
@@ -676,8 +650,6 @@ def append_hr_correlation_to_summary(
     spear_rho: Optional[float],
     rmse: Optional[float],
     prv_summary: Optional[Dict[str, float]] = None,
-    mayer_peak_freq: Optional[float] = None,
-    resp_peak_freq: Optional[float] = None,
     *,
     t_hr: Optional[np.ndarray] = None,
     hr_calc: Optional[np.ndarray] = None,
@@ -689,7 +661,6 @@ def append_hr_correlation_to_summary(
     prv_mask_info: Optional[Dict[str, object]] = None,
     prv_midpoint_halves: Optional[Dict[str, Dict[str, float]]] = None,
     aux_df: Optional[Any] = None,
-    psd_features: Optional[Dict[str, float]] = None,
 ) -> Path:
     """
     Backward-compatible wrapper.
@@ -698,8 +669,6 @@ def append_hr_correlation_to_summary(
     return append_hr_prv_summary(
         edf_path=edf_path,
         prv_summary=prv_summary,
-        mayer_peak_freq=mayer_peak_freq,
-        resp_peak_freq=resp_peak_freq,
         t_hr=t_hr,
         hr_calc=hr_calc,
         t_prv=t_prv,
@@ -709,5 +678,4 @@ def append_hr_correlation_to_summary(
         prv_mask_info=prv_mask_info,
         prv_midpoint_halves=prv_midpoint_halves,
         aux_df=aux_df,
-        psd_features=psd_features,
     )

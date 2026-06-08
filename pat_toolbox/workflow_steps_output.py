@@ -14,10 +14,10 @@ def build_pdf_step(ctx: RecordingContext) -> None:
     assert ctx.view_pat is not None and ctx.view_pat_filt is not None and ctx.sfreq is not None
     out_folder = paths.get_output_folder()
     suffix = "_multi_sleep_summary" if getattr(ctx, "sleep_combo_summaries", None) else (config.sleep_stage_suffix() if getattr(config, "ENABLE_SLEEP_STAGE_MASKING", False) else "")
-    feature_parts = ["VIEW_PAT", *features.enabled_feature_parts(("hr", "prv", "psd"))]
+    feature_parts = ["VIEW_PAT", *features.enabled_feature_parts(("hr", "prv"))]
     pdf_name = f"{ctx.edf_base}__{'_'.join(feature_parts)}_{config.SEGMENT_MINUTES}min_overlay{suffix}.pdf"
     ctx.pdf_path = out_folder / pdf_name
-    psd_results_dict = plotting.plot_pat_and_hr_segments_to_pdf(
+    plotting.plot_pat_and_hr_segments_to_pdf(
         signal_raw=ctx.view_pat,
         signal_filt=ctx.view_pat_filt,
         sfreq=ctx.sfreq,
@@ -46,10 +46,6 @@ def build_pdf_step(ctx: RecordingContext) -> None:
         prv_mask_info=getattr(ctx, "prv_mask_info", None),
         prv_midpoint_halves=getattr(ctx, "prv_midpoint_halves", None),
     )
-    if features.is_enabled("psd"):
-        ctx.psd_features = psd_results_dict
-        ctx.mayer_peak_freq = psd_results_dict.get("mayer_peak_hz")
-        ctx.resp_peak_freq = psd_results_dict.get("resp_peak_hz")
     print(f"  Saved feature report to: {ctx.pdf_path}")
 
 
@@ -127,8 +123,6 @@ def append_summary_step(ctx: RecordingContext) -> None:
     hr_metrics.append_hr_prv_summary(
         ctx.edf_path,
         ctx.prv_summary,
-        ctx.mayer_peak_freq,
-        ctx.resp_peak_freq,
         t_hr=ctx.t_hr_calc,
         hr_calc=ctx.hr_calc,
         t_prv=ctx.t_prv,
@@ -138,6 +132,5 @@ def append_summary_step(ctx: RecordingContext) -> None:
         prv_mask_info=ctx.prv_mask_info,
         prv_midpoint_halves=getattr(ctx, "prv_midpoint_halves", None),
         aux_df=ctx.aux_df,
-        psd_features=getattr(ctx, "psd_features", None),
         sleep_combo_summaries=getattr(ctx, "sleep_combo_summaries", None),
     )

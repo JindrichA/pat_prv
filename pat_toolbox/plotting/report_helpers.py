@@ -8,7 +8,6 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
 from .. import features
-from ..metrics.psd import compute_psd_figures_and_peaks
 from .feature_overview_builders import (
     _build_hr_overview_figure,
     _build_prv_rmssd_overview_figure,
@@ -43,33 +42,16 @@ def _build_report_context(
     edf_base = _infer_edf_base(pdf_path)
     exclusion_zones = _compute_exclusion_zones(aux_df)
     event_spec = active_event_plot_spec()
-    psd_features = None
-    fig_psd_zoom = None
-    fig_psd_full = None
-    if features.is_enabled("psd"):
-        psd_features, fig_psd_zoom, fig_psd_full, _psd_png_zoom, _psd_png_full = compute_psd_figures_and_peaks(
-            signal_raw,
-            sfreq,
-            edf_base=edf_base,
-            aux_df=aux_df,
-        )
     return {
         "edf_base": edf_base,
         "exclusion_zones": exclusion_zones,
         "event_spec": event_spec,
-        "psd_features": psd_features,
-        "fig_psd_zoom": fig_psd_zoom,
-        "fig_psd_full": fig_psd_full,
-        "mayer_peak_freq": None if psd_features is None else psd_features.get("mayer_peak_hz"),
-        "resp_peak_freq": None if psd_features is None else psd_features.get("resp_peak_hz"),
     }
 
 
 def _build_summary_pages_for_enabled_features(
     *,
     edf_base: str,
-    mayer_peak_freq,
-    resp_peak_freq,
     aux_df,
     t_hr_calc,
     hr_calc,
@@ -78,7 +60,6 @@ def _build_summary_pages_for_enabled_features(
     prv_rmssd_raw,
     prv_tv,
     prv_summary,
-    psd_features,
     sleep_combo_summaries,
     prv_mask_info,
     prv_midpoint_halves,
@@ -89,8 +70,6 @@ def _build_summary_pages_for_enabled_features(
         spear_rho=None,
         rmse=None,
         prv_summary=prv_summary,
-        mayer_peak_freq=mayer_peak_freq,
-        resp_peak_freq=resp_peak_freq,
         aux_df=aux_df,
         t_hr_calc=t_hr_calc,
         hr_calc=hr_calc,
@@ -100,7 +79,6 @@ def _build_summary_pages_for_enabled_features(
         prv_clean=prv_rmssd,
         prv_raw=prv_rmssd_raw,
         prv_tv=prv_tv,
-        psd_features=psd_features,
         sleep_combo_summaries=sleep_combo_summaries,
         prv_mask_info=prv_mask_info,
         prv_midpoint_halves=prv_midpoint_halves,
@@ -270,9 +248,6 @@ def _build_report_figures(
     duration_sec: float,
     exclusion_zones,
     event_spec,
-    psd_features,
-    mayer_peak_freq,
-    resp_peak_freq,
     t_hr_calc,
     hr_calc,
     t_prv,
@@ -288,8 +263,6 @@ def _build_report_figures(
 ):
     summary_pages = _build_summary_pages_for_enabled_features(
         edf_base=edf_base,
-        mayer_peak_freq=mayer_peak_freq,
-        resp_peak_freq=resp_peak_freq,
         aux_df=aux_df,
         t_hr_calc=t_hr_calc,
         hr_calc=hr_calc,
@@ -298,7 +271,6 @@ def _build_report_figures(
         prv_rmssd_raw=prv_rmssd_raw,
         prv_tv=prv_tv,
         prv_summary=prv_summary,
-        psd_features=psd_features,
         sleep_combo_summaries=sleep_combo_summaries,
         prv_mask_info=prv_mask_info,
         prv_midpoint_halves=prv_midpoint_halves,

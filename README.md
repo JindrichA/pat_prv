@@ -2,7 +2,7 @@
 
 PAT Toolbox is a config-driven Python pipeline for processing whole-night EDF recordings with PAT-derived physiology signals, synchronized auxiliary sleep/event CSVs, and report-style outputs.
 
-It is designed for recordings that contain `VIEW_PAT` and synchronized auxiliary sleep/event CSVs. The pipeline computes PAT-derived heart rate (HR), pulse rate variability (PRV), optional PSD summaries, and multi-page PDF reports.
+It is designed for recordings that contain `VIEW_PAT` and synchronized auxiliary sleep/event CSVs. The pipeline computes PAT-derived heart rate (HR), pulse rate variability (PRV), and multi-page PDF reports.
 
 Physiologically, the repository starts from the peripheral arterial tone waveform and treats it as a pulsatile vascular signal. Detected PAT pulse peaks are converted into pulse-to-pulse intervals, and those intervals are then used to derive HR, PRV, and tachogram-based spectral summaries. In other words, the main derived quantities are vascular pulse-based rather than ECG-based.
 
@@ -47,7 +47,6 @@ The rest of this README explains what the pipeline computes, how the codebase is
 - Computes PAT-derived HR on a regular time grid.
 - Computes PRV metrics including RMSSD, SDNN, LF, HF, LF/HF, and time-varying PRV series.
 - Applies shared sleep-stage, event, and desaturation masking across metrics and plots.
-- Computes PSD summaries from a PR tachogram representation when enabled.
 - Produces summary CSV outputs and multi-page PDF reports.
 
 In practical terms, the toolbox answers questions such as:
@@ -101,18 +100,13 @@ flowchart TD
 
     F --> L[Compute HR\nconfig: HR_*]
     F --> M[Compute PRV\nRMSSD, SDNN, LF, HF, LF/HF\nconfig: PRV_*]
-    F --> N[Compute PSD from tachogram\nconfig: PSD_*]
-
     K --> L
     K --> M
-    K --> N
     L --> Q[Build summary tables]
     M --> Q
-    N --> Q
 
     L --> R[Build report figures]
     M --> R
-    N --> R
     K --> R
     Q --> S[Write PDF report]
     R --> S
@@ -121,7 +115,7 @@ flowchart TD
     Q --> U[Append summary CSV row]
 ```
 
-In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives masking, and all of them come together in the final PDF and summary outputs.
+In short: PAT drives the PR series, PR drives HR/PRV, aux data drives masking, and all of them come together in the final PDF and summary outputs.
 
 ## Repository Layout
 
@@ -171,8 +165,6 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
    |  |- prv_io.py
    |  |- prv_pipeline.py
    |  |- prv_time_domain.py
-   |  |- psd.py
-   |  |- psd_pipeline.py
    |  `- spectral_utils.py
    `- plotting/
       |- __init__.py
@@ -300,19 +292,6 @@ Internal split:
 - `pat_toolbox/metrics/prv_io.py`
   - PRV CSV export
 
-### PSD
-
-Public facade:
-
-- `pat_toolbox/metrics/psd.py`
-
-Internal split:
-
-- `pat_toolbox/metrics/psd_pipeline.py`
-  - PSD feature extraction and figure generation
-- `pat_toolbox/metrics/spectral_utils.py`
-  - shared Welch/tachogram spectral helpers
-
 ## Plotting And Reporting Overview
 
 Public plotting entry points:
@@ -395,7 +374,7 @@ The code normalizes aux fields using `config.COL_NAMES` and related aux settings
 
 ## Shared Masking Model
 
-The repository uses a shared masking approach so that PRV, PSD, and plots refer to the same basic exclusion logic.
+The repository uses a shared masking approach so that PRV and plots refer to the same basic exclusion logic.
 
 Conceptually, masking combines:
 
@@ -429,7 +408,6 @@ Example:
 FEATURES = {
     "hr": True,
     "prv": True,
-    "psd": True,
     "sleep_combo_summary": False,
     "report_pdf": True,
     "peaks_debug_pdf": False,
@@ -442,8 +420,6 @@ What these top-level switches mean:
   - enables PAT-derived heart-rate calculation and HR-owned summary outputs
 - `prv`
   - enables PRV calculation, PRV report figures, and PRV CSV export
-- `psd`
-  - enables spectral feature calculation and PSD report pages
 - `sleep_combo_summary`
   - enables extra fixed sleep-subset comparison summaries
 - `report_pdf`
@@ -455,7 +431,7 @@ Recommended workflow for users:
 
 1. decide which features should be on in `FEATURES`
 2. run the pipeline once
-3. only then tune detailed knobs like `HR_*`, `PRV_*`, or `PSD_*`
+3. only then tune detailed knobs like `HR_*` or `PRV_*`
 
 Common configuration areas include:
 
@@ -467,7 +443,6 @@ Common configuration areas include:
 - HR thresholds and smoothing
 - PR cleaning thresholds
 - PRV windows and spectral settings
-- PSD band definitions
 - report layout / debugging options
 
 Most experiments should be done by editing config values rather than modifying metric code.
@@ -530,7 +505,6 @@ Typical outputs include:
 - per-run PDF reports
 - HR CSV outputs
 - PRV CSV outputs
-- PSD figures
 - optional PAT peak debug PDFs
 - optional publication-style PRV PNG figures
 - appended summary CSV rows
@@ -565,8 +539,6 @@ python3 main.py
   - check `BASE_OUTPUT_DIR`, `RUN_TAG`, and sleep-stage policy
 - HR/PRV outputs are sparse or empty
   - inspect PAT quality, PR cleaning, masking policy, and exclusion windows
-- PSD features are missing
-  - the PR series may be too fragmented after masking
 - aux overlays are missing
   - inspect aux CSV naming, time parsing, and `COL_NAMES`
 - report content differs from expectation
@@ -587,5 +559,4 @@ python3 main.py
 - Main report generation: `pat_toolbox/plotting/report.py`
 - HR facade: `pat_toolbox/metrics/hr.py`
 - PRV facade: `pat_toolbox/metrics/prv.py`
-- PSD facade: `pat_toolbox/metrics/psd.py`
 - Main configuration: `pat_toolbox/config.py`

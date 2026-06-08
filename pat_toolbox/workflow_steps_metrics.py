@@ -8,7 +8,6 @@ from .context import RecordingContext
 from .io_aux_csv import compute_sleep_timing_from_aux
 from .metrics import hr as hr_metrics
 from .metrics import prv as prv_metrics
-from .metrics import psd as psd_metrics
 
 
 def _hr_summary_for_subset(
@@ -64,17 +63,12 @@ def _compute_single_sleep_combo_summary(
     if features.is_enabled("hr") and t_hr_subset is not None and hr_raw_subset is not None and aux_df is not None:
         hr_summary = _hr_summary_for_subset(hr_raw_subset, t_hr_subset, aux_df, include_set)
 
-    psd_features = None
-    if features.is_enabled("psd"):
-        psd_features = psd_metrics.compute_psd_features_from_pr(pr_mid, pr_ms, duration_sec, aux_df, include_set=include_set)
-
     return {
         "label": label,
         "include_set": set(include_set),
         "sleep_hours": sleep_hours,
         "hr_summary": hr_summary,
         "prv_summary": prv_summary,
-        "psd_features": psd_features,
     }
 
 
@@ -82,7 +76,7 @@ def compute_sleep_combo_summaries_step(ctx: RecordingContext) -> None:
     ctx.sleep_combo_summaries = None
     if not features.is_enabled("sleep_combo_summary"):
         return
-    if not features.any_enabled("hr", "prv", "psd"):
+    if not features.any_enabled("hr", "prv"):
         return
     if ctx.view_pat is None or ctx.sfreq is None or ctx.sfreq <= 0:
         return
@@ -234,34 +228,3 @@ def compute_prv_step(ctx: RecordingContext) -> None:
         ctx.prv_tv = None
         ctx.prv_mask_info = None
         ctx.prv_midpoint_halves = None
-
-
-def compute_psd_step(ctx: RecordingContext) -> None:
-    if not features.is_enabled("psd"):
-        ctx.psd_features = None
-        ctx.mayer_peak_freq = None
-        ctx.resp_peak_freq = None
-        return
-    if ctx.view_pat is None or ctx.sfreq is None or ctx.sfreq <= 0:
-        ctx.psd_features = None
-        ctx.mayer_peak_freq = None
-        ctx.resp_peak_freq = None
-        return
-
-    try:
-        pr_sec, pr_mid, duration_sec = hr_metrics.extract_clean_pr_from_pat(ctx.view_pat, ctx.sfreq)
-        pr_ms = pr_sec * 1000.0
-        ctx.psd_features = psd_metrics.compute_psd_features_from_pr(
-            pr_mid,
-            pr_ms,
-            float(duration_sec),
-            ctx.aux_df,
-        )
-        if ctx.psd_features is not None:
-            ctx.mayer_peak_freq = ctx.psd_features.get("mayer_peak_hz")
-            ctx.resp_peak_freq = ctx.psd_features.get("resp_peak_hz")
-    except Exception as e:
-        print(f"  WARNING: PSD computation failed: {e}")
-        ctx.psd_features = None
-        ctx.mayer_peak_freq = None
-        ctx.resp_peak_freq = None

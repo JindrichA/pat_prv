@@ -13,7 +13,8 @@ def _lf_hf_from_pr(
     fs_resample: float = 4.0,
 ) -> Tuple[float, float, float]:
     """
-    Compute LF, HF, LF/HF from PR intervals using Welch PSD on a resampled tachogram.
+    Compute LF, HF, and LF/HF from PR intervals using Welch spectral estimation
+    on a resampled tachogram.
     """
     if pr_ms.size < 4 or pr_mid_times_sec.size < 4:
         return np.nan, np.nan, np.nan
