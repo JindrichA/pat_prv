@@ -2,7 +2,7 @@
 
 PAT Toolbox is a config-driven Python pipeline for processing whole-night EDF recordings with PAT-derived physiology signals, synchronized auxiliary sleep/event CSVs, and report-style outputs.
 
-It is designed for recordings that contain `VIEW_PAT` and, when available, optional derived channels such as PAT amplitude and actigraphy. The pipeline computes PAT-derived heart rate (HR), pulse rate variability (PRV), optional PSD and PAT burden summaries, and multi-page PDF reports.
+It is designed for recordings that contain `VIEW_PAT` and synchronized auxiliary sleep/event CSVs. The pipeline computes PAT-derived heart rate (HR), pulse rate variability (PRV), optional PSD summaries, and multi-page PDF reports.
 
 Physiologically, the repository starts from the peripheral arterial tone waveform and treats it as a pulsatile vascular signal. Detected PAT pulse peaks are converted into pulse-to-pulse intervals, and those intervals are then used to derive HR, PRV, and tachogram-based spectral summaries. In other words, the main derived quantities are vascular pulse-based rather than ECG-based.
 
@@ -25,7 +25,7 @@ For a first-time reader, it is helpful to think of the pipeline in three layers:
 2. `PR interval stream`
    - the sequence of pulse-to-pulse intervals obtained from adjacent PAT peaks
 3. `derived summaries`
-   - HR, PRV, spectral PRV measures, and optional burden/event-response summaries
+   - HR, PRV, and spectral PRV measures
 
 This means that the report pages and CSV outputs are not abstract signal-processing products only. They are intended to describe how vascular pulse timing and amplitude vary across the night and across different sleep or event conditions.
 
@@ -35,7 +35,7 @@ If you are opening this repository for the first time, the shortest practical pa
 
 1. Edit the dataset and output paths in `pat_toolbox/config.py`.
 2. Decide which outputs you want in the top-level `FEATURES` block.
-3. Run `python main.py` from the repository root.
+3. Run `python3 main.py` from the repository root, or use the Python executable from your activated virtual environment.
 4. Check the generated PDF report, PRV/HR CSV files, and summary CSV output.
 
 The rest of this README explains what the pipeline computes, how the codebase is organized, and which config groups control the main steps.
@@ -47,8 +47,7 @@ The rest of this README explains what the pipeline computes, how the codebase is
 - Computes PAT-derived HR on a regular time grid.
 - Computes PRV metrics including RMSSD, SDNN, LF, HF, LF/HF, and time-varying PRV series.
 - Applies shared sleep-stage, event, and desaturation masking across metrics and plots.
-- Computes PSD summaries from a PR tachogram representation.
-- Optionally computes PAT burden from PAT amplitude around masked event regions.
+- Computes PSD summaries from a PR tachogram representation when enabled.
 - Produces summary CSV outputs and multi-page PDF reports.
 
 In practical terms, the toolbox answers questions such as:
@@ -66,16 +65,13 @@ For each EDF file, the current processing path is:
 
 1. Load `VIEW_PAT`
 2. Band-pass filter PAT
-3. Load PAT amplitude if available
-4. Load and normalize synchronized auxiliary CSV if available
-5. Compute optional sleep-combination summaries
-6. Compute PAT burden
-7. Compute PAT-derived HR
-8. Compute delta-HR
-9. Compute PRV and PRV summary outputs
-10. Build a multi-page report PDF
-11. Optionally build a PAT peaks debug PDF
-12. Append one summary CSV row for the recording
+3. Load and normalize synchronized auxiliary CSV if available
+4. Compute optional sleep-combination summaries
+5. Compute PAT-derived HR
+6. Compute PRV and PRV summary outputs
+7. Build a multi-page report PDF
+8. Optionally build a PAT peaks debug PDF
+9. Append one summary CSV row for the recording
 
 The public workflow entry remains `pat_toolbox/workflows.py`, but the implementation is now split into smaller load / metric / output step modules.
 
@@ -97,7 +93,6 @@ flowchart TD
     D --> E[Extract PAT pulse intervals\nPR stream]
     E --> F[Clean PR\nconfig: HR_PR_*]
 
-    A --> G[Load PAT AMP if available\nconfig: PAT_AMP_CHANNEL_NAME]
     A --> H[Load aux CSV if available\nconfig: AUX_* and COL_NAMES]
     H --> I[Sleep stage mapping\nconfig: SLEEP_STAGE_POLICY]
     H --> J[Event and desaturation exclusion windows\nconfig: PRV_EXCLUSION_*]
@@ -107,25 +102,17 @@ flowchart TD
     F --> L[Compute HR\nconfig: HR_*]
     F --> M[Compute PRV\nRMSSD, SDNN, LF, HF, LF/HF\nconfig: PRV_*]
     F --> N[Compute PSD from tachogram\nconfig: PSD_*]
-    G --> O[Compute PAT burden\nconfig: PAT_BURDEN_*]
 
     K --> L
     K --> M
     K --> N
-    K --> O
-
-    L --> P[Compute delta-HR\nconfig: DELTA_HR_*]
-
     L --> Q[Build summary tables]
     M --> Q
     N --> Q
-    O --> Q
-    P --> Q
 
     L --> R[Build report figures]
     M --> R
     N --> R
-    O --> R
     K --> R
     Q --> S[Write PDF report]
     R --> S
@@ -145,9 +132,12 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
 |- AGENTS.md
 |- analysis/
 |  |- boxplots_AHI.py
-|  `- boxplots_AHI_groups.py
+|  |- boxplots_AHI_groups.py
+|  `- check_edf_integrity.py
 |- experiments/
-|  `- hypnogram_diego.py
+|  |- analysis_deltaHR.py
+|  |- merge_tables.py
+|  `- plot_all_data_statistics.py
 `- pat_toolbox/
    |- __init__.py
    |- config.py
@@ -176,7 +166,6 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
    |  |- hr.py
    |  |- hr_compute.py
    |  |- hr_debug.py
-   |  |- hr_delta.py
    |  |- hr_io.py
    |  |- hr_summary.py
    |  |- prv.py
@@ -184,7 +173,6 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
    |  |- prv_io.py
    |  |- prv_pipeline.py
    |  |- prv_time_domain.py
-   |  |- pat_burden.py
    |  |- psd.py
    |  |- psd_pipeline.py
    |  `- spectral_utils.py
@@ -229,15 +217,12 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
 
 - PAT loading
 - PAT filtering
-- PAT amplitude loading
 - aux CSV loading and normalization handoff
 
 ### `pat_toolbox/workflow_steps_metrics.py`
 
 - HR computation
-- delta-HR computation
 - PRV computation
-- PAT burden computation
 - fixed sleep-subset summaries
 
 ### `pat_toolbox/workflow_steps_output.py`
@@ -330,13 +315,6 @@ Internal split:
 - `pat_toolbox/metrics/spectral_utils.py`
   - shared Welch/tachogram spectral helpers
 
-### Other metrics
-
-- `pat_toolbox/metrics/hr_delta.py`
-  - delta-HR series generation
-- `pat_toolbox/metrics/pat_burden.py`
-  - PAT burden metric from PAT amplitude in event/desaturation regions
-
 ## Plotting And Reporting Overview
 
 Public plotting entry points:
@@ -380,7 +358,7 @@ Public plotting entry points:
 - `pat_toolbox/plotting/segments.py`
   - segment page assembly
 - `pat_toolbox/plotting/segment_plot_helpers.py`
-  - HR, PRV, delta-HR, and event overlay helpers
+  - HR, PRV, and event overlay helpers
 
 ### Plotting utilities
 
@@ -402,7 +380,6 @@ The pipeline expects the main PAT channel configured as:
 When present, these may be used in selected metrics or reports:
 
 - `DERIVED_HR`
-- `DERIVED_PAT_AMP`
 - `ACTIGRAPH`
 
 Channel names are configurable in `pat_toolbox/config.py`.
@@ -420,7 +397,7 @@ The code normalizes aux fields using `config.COL_NAMES` and related aux settings
 
 ## Shared Masking Model
 
-The repository uses a shared masking approach so that PRV, PSD, burden, and plots refer to the same basic exclusion logic.
+The repository uses a shared masking approach so that PRV, PSD, and plots refer to the same basic exclusion logic.
 
 Conceptually, masking combines:
 
@@ -455,8 +432,6 @@ FEATURES = {
     "hr": True,
     "prv": True,
     "psd": True,
-    "delta_hr": False,
-    "pat_burden": False,
     "sleep_combo_summary": False,
     "report_pdf": True,
     "peaks_debug_pdf": False,
@@ -471,10 +446,6 @@ What these top-level switches mean:
   - enables PRV calculation, PRV report figures, and PRV CSV export
 - `psd`
   - enables spectral feature calculation and PSD report pages
-- `delta_hr`
-  - enables event-response HR summaries and event-response HR plots on the original HR signal
-- `pat_burden`
-  - enables PAT amplitude loading, burden calculation, burden plotting, and burden summary outputs
 - `sleep_combo_summary`
   - enables extra fixed sleep-subset comparison summaries
 - `report_pdf`
@@ -486,7 +457,7 @@ Recommended workflow for users:
 
 1. decide which features should be on in `FEATURES`
 2. run the pipeline once
-3. only then tune detailed knobs like `HR_*`, `PRV_*`, `PSD_*`, or `PAT_BURDEN_*`
+3. only then tune detailed knobs like `HR_*`, `PRV_*`, or `PSD_*`
 
 Common configuration areas include:
 
@@ -499,8 +470,6 @@ Common configuration areas include:
 - PR cleaning thresholds
 - PRV windows and spectral settings
 - PSD band definitions
-- delta-HR settings
-- PAT burden settings
 - report layout / debugging options
 
 Most experiments should be done by editing config values rather than modifying metric code.
@@ -510,7 +479,7 @@ Most experiments should be done by editing config values rather than modifying m
 Create and activate a virtual environment, then install dependencies:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -534,7 +503,7 @@ Additional analysis/plotting packages are pinned in `requirements.txt`.
 ### Full pipeline
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 This is the standard batch workflow and uses the current values in `pat_toolbox/config.py`.
@@ -549,9 +518,9 @@ In most cases, the only required edits before the first run are:
 ### Stand-alone scripts
 
 ```bash
-python analysis/boxplots_AHI.py
-python analysis/boxplots_AHI_groups.py
-python experiments/hypnogram_diego.py
+python3 analysis/boxplots_AHI.py
+python3 analysis/boxplots_AHI_groups.py
+python3 experiments/analysis_deltaHR.py
 ```
 
 Run everything from the repository root.
@@ -581,13 +550,13 @@ There is currently no automated in-repo test suite.
 For a safe syntax check, run:
 
 ```bash
-python -m compileall main.py pat_toolbox analysis experiments
+python3 -m compileall main.py pat_toolbox analysis experiments
 ```
 
 If local data paths are valid, the most important real smoke test is:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 ## Troubleshooting
@@ -608,7 +577,8 @@ python main.py
 ## Development Notes
 
 - The repository is plain Python, not a packaged project.
-- Absolute paths in `pat_toolbox/config.py` are machine-specific by design.
+- Absolute paths in `pat_toolbox/config.py` are currently machine-specific for the local analysis workflow.
+- Publication metadata, citation details, and data-access instructions are intentionally not finalized yet.
 - The current codebase has already been refactored into smaller metric, plotting, and workflow modules while keeping stable public entry points.
 - `AGENTS.md` contains agent-facing repository guidance and validation expectations.
 

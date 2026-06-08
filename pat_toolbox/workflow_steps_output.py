@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, cast
-
 from . import config, features, paths, plotting
 from .context import RecordingContext
 from .io_aux_csv import save_sleep_timing_to_csv
 from .metrics import hr as hr_metrics
 from .metrics import prv as prv_metrics
-from .metrics.pat_burden_io import save_pat_burden_episodes_to_csv
 
 
 def build_pdf_step(ctx: RecordingContext) -> None:
@@ -17,7 +14,7 @@ def build_pdf_step(ctx: RecordingContext) -> None:
     assert ctx.view_pat is not None and ctx.view_pat_filt is not None and ctx.sfreq is not None
     out_folder = paths.get_output_folder()
     suffix = "_multi_sleep_summary" if getattr(ctx, "sleep_combo_summaries", None) else (config.sleep_stage_suffix() if getattr(config, "ENABLE_SLEEP_STAGE_MASKING", False) else "")
-    feature_parts = ["VIEW_PAT", *features.enabled_feature_parts(("hr", "prv", "psd", "delta_hr", "pat_burden"))]
+    feature_parts = ["VIEW_PAT", *features.enabled_feature_parts(("hr", "prv", "psd"))]
     pdf_name = f"{ctx.edf_base}__{'_'.join(feature_parts)}_{config.SEGMENT_MINUTES}min_overlay{suffix}.pdf"
     ctx.pdf_path = out_folder / pdf_name
     psd_results_dict = plotting.plot_pat_and_hr_segments_to_pdf(
@@ -45,10 +42,6 @@ def build_pdf_step(ctx: RecordingContext) -> None:
         rmse=None,
         prv_summary=ctx.prv_summary,
         aux_df=ctx.aux_df,
-        t_pat_amp=ctx.t_pat_amp,
-        pat_amp=ctx.pat_amp,
-        pat_burden=getattr(ctx, "pat_burden", None),
-        pat_burden_diag=getattr(ctx, "pat_burden_diag", None),
         sleep_combo_summaries=getattr(ctx, "sleep_combo_summaries", None),
         prv_mask_info=getattr(ctx, "prv_mask_info", None),
         prv_midpoint_halves=getattr(ctx, "prv_midpoint_halves", None),
@@ -77,14 +70,6 @@ def export_feature_csvs_step(ctx: RecordingContext) -> None:
                 ctx.prv_mask_csv_path = prv_metrics.save_prv_mask_to_csv(ctx.edf_path, ctx.t_prv, ctx.prv_mask_info)
         except Exception as e:
             print(f"  WARNING: could not save PRV mask CSV for {ctx.edf_path.name}: {e}")
-
-    if features.is_enabled("pat_burden") and getattr(ctx, "pat_burden_episodes", None):
-        try:
-            episodes = ctx.pat_burden_episodes
-            if episodes is not None:
-                ctx.pat_burden_csv_path = save_pat_burden_episodes_to_csv(ctx.edf_path, cast(list[dict[str, Any]], episodes))
-        except Exception as e:
-            print(f"  WARNING: could not save PAT burden CSV for {ctx.edf_path.name}: {e}")
 
     if ctx.aux_df is not None:
         try:
@@ -154,7 +139,5 @@ def append_summary_step(ctx: RecordingContext) -> None:
         prv_midpoint_halves=getattr(ctx, "prv_midpoint_halves", None),
         aux_df=ctx.aux_df,
         psd_features=getattr(ctx, "psd_features", None),
-        pat_burden=getattr(ctx, "pat_burden", None),
-        pat_burden_diag=getattr(ctx, "pat_burden_diag", None),
         sleep_combo_summaries=getattr(ctx, "sleep_combo_summaries", None),
     )

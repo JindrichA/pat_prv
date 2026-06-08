@@ -27,7 +27,7 @@ EDF_FOLDER = Path(
 
 
 # Set to an integer for short debug runs, or keep None to process everything.
-MAX_FILES = None
+MAX_FILES = 5
 
 # RUN_ID is generated automatically at import time.
 RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -41,14 +41,12 @@ RUN_TAG = "RMSSD_times"
 # keep it out of computation, tables, plots, and file outputs.
 # Recommended workflow:
 #   1. decide which features should be part of the run here
-#   2. only then tune the detailed HR / PRV / PSD / burden knobs below
+#   2. only then tune the detailed HR / PRV / PSD knobs below
 #
 # In practice:
 #   - hr                  -> PAT-derived heart-rate series and HR summary outputs
 #   - prv                 -> RMSSD/SDNN/LF/HF/LF-HF calculations, PRV plots, PRV CSV
 #   - psd                 -> spectral features and PSD report pages
-#   - delta_hr            -> event-response HR metrics and event-response HR plots
-#   - pat_burden          -> PAT amplitude loading, burden metric, burden subplot/rows
 #   - sleep_combo_summary -> extra fixed sleep-subset comparison summaries
 #   - report_pdf          -> main multi-page PDF report
 #   - peaks_debug_pdf     -> PAT peak-debug PDF
@@ -56,8 +54,6 @@ FEATURES = {
     "hr": True,
     "prv": True,
     "psd": False,
-    "delta_hr": False,
-    "pat_burden": False,
     "pwa_drop": False,
     "sleep_combo_summary": True,
     "report_pdf": True,
@@ -89,7 +85,7 @@ def _slug(s: str) -> str:
 # Sleep Stage Mapping And Inclusion Policy
 # =============================================================================
 # These settings decide which sleep stages are considered "included" for PRV,
-# PSD, PAT burden, and some plotting masks. This is one of the highest-impact
+# PSD and plotting masks. This is one of the highest-impact
 # groups in the config because it changes which parts of the night contribute.
 
 # Canonical numeric codes used internally:
@@ -184,9 +180,7 @@ def run_suffix() -> str:
 OUTPUT_SUBFOLDER = f"ViewPatPlotsOverlay__{run_suffix()}"
 HR_OUTPUT_SUBFOLDER = f"HR__{run_suffix()}"
 PRV_OUTPUT_SUBFOLDER = f"PRV__{run_suffix()}"
-DELTA_HR_OUTPUT_SUBFOLDER = f"EVENT_HR__{run_suffix()}"
 PUBLICATION_PRV_OUTPUT_SUBFOLDER = f"PublicationPRV__{run_suffix()}"
-PAT_BURDEN_OUTPUT_SUBFOLDER = f"PATBurden__{run_suffix()}"
 PWA_DROP_OUTPUT_SUBFOLDER = f"PWADrop__{run_suffix()}"
 PSD_OUTPUT_SUBFOLDER = f"PSD__{run_suffix()}"
 
@@ -231,7 +225,7 @@ COL_NAMES: Dict[str, str] = {
 # metrics. If a user wants more or less aggressive masking, this is the first
 # place to inspect.
 
-# Shared exclusion inputs used by HR/PRV/PSD/PAT burden plotting and calculations.
+# Shared exclusion inputs used by HR/PRV/PSD plotting and calculations.
 PRV_EXCLUSION_EVENT_COLUMNS = [
     "evt_central_3",
     "evt_obstructive_3",
@@ -431,38 +425,6 @@ PSD_RESP_BAND = (0.15, 0.23)
 
 
 # =============================================================================
-# Event-Response HR Feature
-# =============================================================================
-# This feature now focuses on event-centered HR response summaries and visual
-# overlays on the original HR signal rather than on a separate lag-difference
-# signal plot.
-
-ENABLE_DELTA_HR = FEATURES["delta_hr"]
-# Plot mode for segment pages:
-#   "subplot" -> extra row showing event-response HR windows on the HR signal
-#   "twinx"   -> reserved for future overlay mode
-DELTA_HR_PLOT_MODE = "subplot"
-
-# Event-response HR definition.
-# The HR signal is smoothed first, then for each event start time ts:
-#   event window    = [ts, ts + HR_EVENT_WINDOW_SEC]
-#   recovery window = [ts + HR_EVENT_WINDOW_SEC, ts + HR_EVENT_RECOVERY_END_SEC]
-# Two derived metrics are reported from the same windows:
-#   - trough-to-peak response = max(HR in recovery window) - min(HR in event window)
-#   - mean-to-peak delta HR   = max(HR in recovery window) - mean(HR in event window)
-# An event is skipped if either window has insufficient valid HR samples or if a
-# new event begins before the recovery window ends.
-# Optional desaturation-aware extension:
-#   if enabled, the event window is extended to the end of any overlapping
-#   EVENT-gated desaturation window before the recovery window begins.
-HR_EVENT_SMOOTH_SEC = 5.0
-HR_EVENT_WINDOW_SEC = 15.0
-HR_EVENT_RECOVERY_END_SEC = 45.0
-HR_EVENT_MIN_SAMPLES = 3
-HR_EVENT_USE_DESAT_EXTENSION = True
-
-
-# =============================================================================
 # PWA-Drop Feature
 # =============================================================================
 # This feature ports the logic of the external PWA-drop detector into the
@@ -479,18 +441,5 @@ PWA_DROP_SENSORLOSS_THR = 5.0
 PWA_DROP_MAX_HR_BPM = 250.0
 PWA_DROP_SUMMARY_MIN_BASELINE_POINTS = 3
 
-
-# =============================================================================
-# PAT Burden
-# =============================================================================
-# These settings tune how PAT burden episodes are normalized and baseline-corrected.
-# Users interested in the burden metric should mainly experiment here.
-
-ENABLE_PAT_BURDEN = FEATURES["pat_burden"]
-PAT_BURDEN_BASELINE_LOOKBACK_SEC = 30.0
-PAT_BURDEN_BASELINE_MIN_SAMPLES = 5
-PAT_BURDEN_BASELINE_PCTL = 95.0
-PAT_BURDEN_MIN_EPISODE_SEC = 5.0
-PAT_BURDEN_RELATIVE = False
 
 ENABLE_SLEEP_COMBO_SUMMARY = FEATURES["sleep_combo_summary"]

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import numpy as np
-
-from . import config, features, filters, io_aux_csv, io_edf, sleep_mask
+from . import config, filters, io_aux_csv, io_edf, sleep_mask
 from .context import RecordingContext
 
 
@@ -16,27 +14,6 @@ def load_pat(ctx: RecordingContext) -> None:
 def filter_pat(ctx: RecordingContext) -> None:
     assert ctx.view_pat is not None and ctx.sfreq is not None
     ctx.view_pat_filt = filters.bandpass_filter(ctx.view_pat, fs=ctx.sfreq)
-
-
-def load_pat_amp(ctx: RecordingContext) -> None:
-    if not features.is_enabled("pat_burden"):
-        ctx.t_pat_amp = None
-        ctx.pat_amp = None
-        return
-    try:
-        pat_amp_signal, pat_amp_fs = io_edf.read_edf_channel(ctx.edf_path, config.PAT_AMP_CHANNEL_NAME)
-        if pat_amp_fs <= 0:
-            raise ValueError("PAT AMP sampling frequency <= 0")
-        n = len(pat_amp_signal)
-        if n > 0:
-            ctx.t_pat_amp = np.arange(n) / pat_amp_fs
-            ctx.pat_amp = pat_amp_signal.astype(float)
-        else:
-            print("  WARNING: PAT AMP channel exists but is empty.")
-            ctx.t_pat_amp, ctx.pat_amp = None, None
-    except Exception as e:
-        print(f"  WARNING: could not read PAT AMP channel '{config.PAT_AMP_CHANNEL_NAME}': {e}")
-        ctx.t_pat_amp, ctx.pat_amp = None, None
 
 
 def load_aux_csv(ctx: RecordingContext) -> None:

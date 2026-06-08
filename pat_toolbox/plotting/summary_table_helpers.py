@@ -5,12 +5,10 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from .. import config, features, io_aux_csv, masking, sleep_mask
 from ..io.aux_events import compute_sleep_timing_from_aux
 from .prv_plot_utils import _add_colored_event_key, _overlay_events_on_single_axis_whole_night
-from .segment_plot_helpers import _overlay_pat_burden_area
 from .summary_hypnogram import _plot_sleep_stagegram_on_axis
 from .utils import _count_flags, _fmt, _shade_masked_regions
 
@@ -299,11 +297,8 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
     prv_summary: Dict[str, Any] = prv_summary_obj if isinstance(prv_summary_obj, dict) else {}
     psd_features_obj = item.get("psd_features")
     psd_features: Dict[str, Any] = psd_features_obj if isinstance(psd_features_obj, dict) else {}
-    hr_response_obj = item.get("hr_event_response_summary")
-    hr_response: Dict[str, Any] = hr_response_obj if isinstance(hr_response_obj, dict) else {}
     pwa_drop_obj = item.get("pwa_drop_summary")
     pwa_drop: Dict[str, Any] = pwa_drop_obj if isinstance(pwa_drop_obj, dict) else {}
-    burden = item.get("pat_burden")
 
     core_primary = [f"{sleep_hours} h"]
     if features.is_enabled("hr"):
@@ -334,14 +329,6 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
     right: list[str] = []
     if features.is_enabled("psd"):
         right.append(_fmt_int(psd_features.get("n_windows")))
-    if features.is_enabled("delta_hr"):
-        right.extend([
-            f"{_fmt(hr_response.get('trough_to_peak_response_mean'), 2)} bpm",
-            f"{_fmt(hr_response.get('mean_to_peak_response_mean'), 2)} bpm",
-            f"{_fmt_int(hr_response.get('n_used_windows'))}/{_fmt_int(hr_response.get('n_event_windows'))}",
-        ])
-    if features.is_enabled("pat_burden"):
-        right.append(_fmt(burden, 3))
     if features.is_enabled("pwa_drop"):
         right.extend([
             _fmt_int(pwa_drop.get("n_drops")),
@@ -368,10 +355,6 @@ def _sleep_combo_tables(sleep_combo_summaries: Optional[Dict[str, Dict[str, obje
     right_headers = ["Subset"]
     if features.is_enabled("psd"):
         right_headers.append("PSD win")
-    if features.is_enabled("delta_hr"):
-        right_headers.extend(["Tr-Pk resp", "Mean-Pk dHR", "win used/tot"])
-    if features.is_enabled("pat_burden"):
-        right_headers.append("Burden")
     if features.is_enabled("pwa_drop"):
         right_headers.extend(["PWA n", "PWA /h", "PWA amp %"])
 
@@ -445,7 +428,7 @@ def _render_sleep_combo_page(
         next_axis_idx += 1
 
     if right_rows and next_axis_idx < len(axes_list):
-        axes_list[next_axis_idx].set_title("Subset event-response / burden metrics", fontsize=12, pad=56)
+        axes_list[next_axis_idx].set_title("Subset supplemental metrics", fontsize=12, pad=56)
         axes_list[next_axis_idx].text(
             0.5,
             0.98,
@@ -535,7 +518,6 @@ def _build_quality_rows(
 
 def _build_time_series_feature_rows(
     prv_summary: Optional[Dict[str, float]],
-    hr_event_response_summary: Optional[Dict[str, float]] = None,
     pwa_drop_summary: Optional[Dict[str, float]] = None,
 ) -> List[List[str]]:
     rows: List[List[str]] = []
@@ -546,17 +528,6 @@ def _build_time_series_feature_rows(
         sdnn_mean = prv_summary.get("sdnn_mean") if prv_summary else None
         sdnn_median = prv_summary.get("sdnn_median") if prv_summary else None
         rows += [["Selected-policy time-series features", ""], ["  RMSSD mean [ms]", _fmt(rmssd_mean, 2)], ["  RMSSD median [ms]", _fmt(rmssd_median, 2)], ["  SDNN mean [ms]", _fmt(sdnn_mean, 2)], ["  SDNN median [ms]", _fmt(sdnn_median, 2)]]
-    if features.is_enabled("delta_hr"):
-        if rows:
-            rows += [["", ""]]
-        item = hr_event_response_summary if isinstance(hr_event_response_summary, dict) else {}
-        rows += [
-            ["Selected-policy event-response HR", ""],
-            ["  Trough-to-peak response mean [bpm]", _fmt(item.get("trough_to_peak_response_mean"), 2)],
-            ["  Mean-to-peak response mean [bpm]", _fmt(item.get("mean_to_peak_response_mean"), 2)],
-            ["  Event windows used", _fmt_int(item.get("n_used_windows"))],
-            ["  Event windows total", _fmt_int(item.get("n_event_windows"))],
-        ]
     if features.is_enabled("pwa_drop"):
         if rows:
             rows += [["", ""]]
@@ -595,61 +566,6 @@ def _build_spectral_feature_rows(
         rows += [["Selected-policy spectral analysis", ""], ["  Mayer peak [Hz]", _fmt(mayer_peak_freq, 3)], ["  Resp peak [Hz]", _fmt(resp_peak_freq, 3)]]
         if psd_features:
             rows += [["  PSD mode", str(psd_features.get("psd_mode", "matched"))], ["  VLF power (0.0033–0.04 Hz)", _fmt_sci(psd_features.get("pow_vlf"))], ["  Mayer power (0.04–0.15 Hz)", _fmt_sci(psd_features.get("pow_mayer"))], ["  Resp power (0.15–0.50 Hz)", _fmt_sci(psd_features.get("pow_resp"))], ["  Mayer power (norm)", _fmt_pct(psd_features.get("norm_mayer"), 1)], ["  Resp power (norm)", _fmt_pct(psd_features.get("norm_resp"), 1)], ["  Valid PSD windows", _fmt_int(psd_features.get("n_windows"))], ["  PSD diagnostic", str(psd_features.get("psd_diag_reason", "")) or "ok"]]
-    return rows
-
-
-def _build_event_response_rows(sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]]) -> List[List[str]]:
-    if not features.is_enabled("delta_hr") or not isinstance(sleep_combo_summaries, dict):
-        return []
-    rows: List[List[str]] = [["Event-response HR metrics", ""], ["Subset", "Tr-Pk resp | Mean-Pk dHR | windows used/total"]]
-    for key in ["pre_sleep_wake", "all_sleep", "wake_sleep", "nrem", "deep", "rem"]:
-        item = sleep_combo_summaries.get(key)
-        if not isinstance(item, dict):
-            continue
-        label = str(item.get("label", key))
-        hr_response_obj = item.get("hr_event_response_summary")
-        hr_response: Dict[str, Any] = hr_response_obj if isinstance(hr_response_obj, dict) else {}
-        rows.append([
-            label,
-            f"{_fmt(hr_response.get('trough_to_peak_response_mean'), 2)} bpm | "
-            f"{_fmt(hr_response.get('mean_to_peak_response_mean'), 2)} bpm | "
-            f"{_fmt_int(hr_response.get('n_used_windows'))}/{_fmt_int(hr_response.get('n_event_windows'))}",
-        ])
-    return rows
-
-
-def _build_pat_burden_rows(
-    pat_burden: Optional[float],
-    pat_burden_diag: Optional[Dict[str, float]],
-) -> List[List[str]]:
-    if not features.is_enabled("pat_burden"):
-        return []
-    rows: List[List[str]] = [["Selected-policy PAT burden", ""]]
-    unit = "rel·min/h" if isinstance(pat_burden_diag, dict) and pat_burden_diag.get("relative") else "amp·min/h"
-    burden_val = float(pat_burden) if pat_burden is not None and np.isfinite(pat_burden) else None
-    rows += [[f"  Burden [{unit}]", _fmt(burden_val, 3)]]
-    if isinstance(pat_burden_diag, dict):
-        rows += [
-            ["  Sleep hours", _fmt_num(pat_burden_diag.get("sleep_hours"), 2)],
-            ["  Episodes total", _fmt_int(pat_burden_diag.get("n_episodes"))],
-            ["  Episodes used", _fmt_int(pat_burden_diag.get("n_episodes_used"))],
-            ["  Episodes skipped", _fmt_int(pat_burden_diag.get("n_episodes_skipped"))],
-            ["  Total area [min]", _fmt_num(pat_burden_diag.get("total_area_min"), 2)],
-            ["  PAT AMP finite [min]", _fmt_num(pat_burden_diag.get("pat_amp_finite_min"), 2)],
-            ["  Selected sleep [min]", _fmt_num(pat_burden_diag.get("sleep_selected_min"), 2)],
-            ["  Inside event/desat [min]", _fmt_num(pat_burden_diag.get("inside_event_desat_min"), 2)],
-            ["  Inside event/desat finite [min]", _fmt_num(pat_burden_diag.get("inside_event_desat_finite_min"), 2)],
-            ["  Invalid PAT AMP inside [min]", _fmt_num(pat_burden_diag.get("pat_amp_invalid_inside_min"), 2)],
-            ["  Baseline lookback [s]", _fmt_num(pat_burden_diag.get("baseline_lookback_sec"), 0)],
-            ["  Baseline percentile", _fmt_num(pat_burden_diag.get("baseline_pctl"), 0)],
-            ["  Baseline min samples", _fmt_int(pat_burden_diag.get("baseline_min_samples"))],
-            ["  Min episode [s]", _fmt_num(pat_burden_diag.get("min_episode_sec"), 0)],
-        ]
-        skipped = pat_burden_diag.get("skipped_reason_counts")
-        if isinstance(skipped, dict) and skipped:
-            rows += [["", ""], ["  Skipped episode reasons", ""]]
-            for reason, count in sorted(skipped.items()):
-                rows.append([f"    {reason}", _fmt_int(count)])
     return rows
 
 
@@ -791,147 +707,8 @@ def _plot_binned_trace(ax, edges_sec: np.ndarray, values: np.ndarray, *, color: 
     _panel_badge(ax, badge)
 
 
-def build_front_page(
-    *,
-    edf_base: str,
-    aux_df: Optional["pd.DataFrame"],
-    t_hr_calc: Optional[np.ndarray],
-    hr_calc: Optional[np.ndarray],
-    hr_calc_raw: Optional[np.ndarray],
-    hr_event_windows: Optional[list[Dict[str, float]]],
-    prv_summary: Optional[Dict[str, float]],
-    t_prv: Optional[np.ndarray],
-    prv_clean: Optional[np.ndarray],
-    hr_event_response_summary: Optional[Dict[str, float]],
-    pat_burden: Optional[float],
-    pat_burden_diag: Optional[Dict[str, float]],
-    pat_burden_episodes: Optional[list[Dict[str, float]]],
-    t_pat_amp: Optional[np.ndarray],
-    pat_amp: Optional[np.ndarray],
-    pwa_drop_summary: Optional[Dict[str, float]],
-    t_pwa: Optional[np.ndarray],
-    pwa_series: Optional[np.ndarray],
-    pwa_drop_events: Optional[list[Dict[str, float]]],
-    event_spec: Optional[list[Any]] = None,
-):
-    mode = str(getattr(config, "SUMMARY_FRONT_PAGE_MODE", "prv")).lower()
-    if mode != "event_vascular":
-        return None
-
-    edges_sec = _front_page_bin_edges(aux_df, t_hr_calc, t_prv, t_pat_amp, t_pwa)
-    if edges_sec is None or edges_sec.size < 2:
-        return None
-
-    fig = plt.figure(figsize=(11.69, 8.27))
-    gs = fig.add_gridspec(5, 1, height_ratios=[1.0, 0.58, 0.58, 0.58, 0.58])
-    fig._event_key_y = 0.965
-    ax_h = fig.add_subplot(gs[0])
-    ax_a = fig.add_subplot(gs[1])
-    ax_p = fig.add_subplot(gs[2], sharex=ax_a)
-    ax_b = fig.add_subplot(gs[3], sharex=ax_a)
-    ax_d = fig.add_subplot(gs[4], sharex=ax_a)
-    ok = _plot_sleep_stagegram_on_axis(
-        ax_h,
-        edf_base=edf_base,
-        aux_df=aux_df,
-        title="Overnight Event-Vascular Overview",
-        show_stats=False,
-    )
-    if not ok:
-        plt.close(fig)
-        return None
-
-    if event_spec is not None:
-        _add_colored_event_key(fig, list(event_spec))
-
-    if aux_df is not None and event_spec is not None:
-        x_end = float(edges_sec[-1]) if edges_sec.size else 0.0
-        for ax in [ax_a, ax_p, ax_b, ax_d]:
-            _overlay_events_on_single_axis_whole_night(
-                ax=ax,
-                aux_df=aux_df,
-                start_sec=0.0,
-                end_sec=x_end,
-                event_spec=list(event_spec),
-                show_legend_labels=False,
-                event_style="short",
-            )
-
-    anchor_vals = _binned_series_mean(t_hr_calc, hr_calc, edges_sec)
-    _plot_binned_trace(
-        ax_a,
-        edges_sec,
-        anchor_vals,
-        color="tab:green",
-        ylabel="HR",
-        title=None,
-        badge=(
-            f"HR {_fmt(float(np.nanmean(np.asarray(hr_calc, dtype=float))) if hr_calc is not None and np.any(np.isfinite(np.asarray(hr_calc, dtype=float))) else np.nan, 1)} bpm"
-            + (
-                f" | RMSSD {_fmt(prv_summary.get('rmssd_mean'), 1)} ms"
-                if isinstance(prv_summary, dict)
-                else ""
-            )
-        ),
-    )
-
-    pwa_vals = _binned_event_count(pwa_drop_events, edges_sec, time_key="t_center")
-    _plot_binned_trace(
-        ax_p,
-        edges_sec,
-        pwa_vals,
-        color="tab:purple",
-        ylabel="Drops",
-        title=None,
-        badge=(
-            f"n {_fmt_int(pwa_drop_summary.get('n_drops'))} | rate {_fmt(pwa_drop_summary.get('drop_rate_per_sleep_hour'), 2)}/h | amp {_fmt(pwa_drop_summary.get('mean_amplitude_pct'), 1)}%"
-            if isinstance(pwa_drop_summary, dict)
-            else "PWA-drop unavailable"
-        ),
-    )
-
-    burden_vals = _binned_event_metric(pat_burden_episodes, edges_sec, time_key="t_start", value_key="area_min", reducer="sum")
-    _plot_binned_trace(
-        ax_b,
-        edges_sec,
-        burden_vals,
-        color="#2a9d8f",
-        ylabel="Burden",
-        title=None,
-        badge=(
-            f"{_fmt(pat_burden, 3)} {'rel·min/h' if isinstance(pat_burden_diag, dict) and pat_burden_diag.get('relative') else 'amp·min/h'} | "
-            f"episodes {_fmt_int(pat_burden_diag.get('n_episodes_used')) if isinstance(pat_burden_diag, dict) else 'NA'}/{_fmt_int(pat_burden_diag.get('n_episodes')) if isinstance(pat_burden_diag, dict) else 'NA'}"
-            if pat_burden is not None or isinstance(pat_burden_diag, dict)
-            else "PAT burden unavailable"
-        ),
-    )
-
-    delta_vals = _binned_event_metric(hr_event_windows, edges_sec, time_key="event_start_t", value_key="mean_to_peak_response", reducer="mean")
-    _plot_binned_trace(
-        ax_d,
-        edges_sec,
-        delta_vals,
-        color="tab:blue",
-        ylabel="dHR",
-        title=None,
-        badge=(
-            f"Tr-Pk {_fmt(hr_event_response_summary.get('trough_to_peak_response_mean'), 2)} bpm | "
-            f"Mean-Pk {_fmt(hr_event_response_summary.get('mean_to_peak_response_mean'), 2)} bpm | "
-            f"used/tot {_fmt_int(hr_event_response_summary.get('n_used_windows'))}/{_fmt_int(hr_event_response_summary.get('n_event_windows'))}"
-            if isinstance(hr_event_response_summary, dict)
-            else "Delta-HR unavailable"
-        ),
-    )
-
-    for ax in [ax_a, ax_p, ax_b, ax_d]:
-        ax.xaxis.set_major_locator(MultipleLocator(1.0))
-        ax.xaxis.set_major_formatter(FuncFormatter(_format_hour_tick))
-    ax_a.tick_params(labelbottom=False)
-    ax_p.tick_params(labelbottom=False)
-    ax_b.tick_params(labelbottom=False)
-    ax_d.set_xlabel("Time since recording start [hours]")
-    fig.tight_layout(rect=(0.03, 0.03, 0.98, 0.98))
-    return fig
+def build_front_page(**_kwargs):
+    return None
 
 
 def _render_table_page(
@@ -1058,13 +835,10 @@ def build_summary_pages(
     prv_raw: Optional[np.ndarray] = None,
     prv_tv: Optional[Dict[str, np.ndarray]] = None,
     psd_features: Optional[Dict[str, float]] = None,
-    pat_burden: Optional[float] = None,
-    pat_burden_diag: Optional[Dict[str, float]] = None,
     pwa_drop_summary: Optional[Dict[str, float]] = None,
     sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]] = None,
     prv_mask_info: Optional[Dict[str, object]] = None,
     prv_midpoint_halves: Optional[Dict[str, Dict[str, float]]] = None,
-    hr_event_response_summary: Optional[Dict[str, float]] = None,
 ):
     pearson_r = None
     spear_rho = None
@@ -1072,20 +846,16 @@ def build_summary_pages(
     t_hr_edf = None
     hr_edf = None
     figs = []
-    has_aux_summary_context = features.any_enabled("prv", "psd", "delta_hr", "pat_burden", "pwa_drop", "sleep_combo_summary")
+    has_aux_summary_context = features.any_enabled("prv", "psd", "pwa_drop", "sleep_combo_summary")
 
     rows_hr_quality, rows_ts_coverage, rows_spectral_coverage = _build_quality_rows(t_hr_calc, hr_calc, t_prv, prv_clean, prv_raw, prv_tv)
 
     if rows_hr_quality:
         figs.append(_render_table_page("Summary (Selected-Policy HR & Coverage)", rows_hr_quality, edf_base=edf_base, font_size=12, scale_y=1.55))
 
-    rows_ts_features = _build_time_series_feature_rows(prv_summary, hr_event_response_summary, pwa_drop_summary)
+    rows_ts_features = _build_time_series_feature_rows(prv_summary, pwa_drop_summary)
     if rows_ts_features:
         figs.append(_render_table_page("Summary (Selected-Policy Time-Series Features)", rows_ts_features, edf_base=edf_base, font_size=12, scale_y=1.35))
-
-    rows_pat_burden = _build_pat_burden_rows(pat_burden, pat_burden_diag)
-    if rows_pat_burden:
-        figs.append(_render_table_page("Summary (Selected-Policy PAT Burden)", rows_pat_burden, edf_base=edf_base, font_size=12, scale_y=1.35))
 
     if rows_ts_coverage:
         figs.append(_render_table_page("Summary (Selected-Policy Time-Series Coverage)", rows_ts_coverage, edf_base=edf_base, font_size=12, scale_y=1.35))

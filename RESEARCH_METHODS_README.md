@@ -16,7 +16,7 @@ Conceptually, the method can be read in three physiological layers:
 
 1. the recorded PAT waveform, which reflects pulsatile peripheral vascular tone
 2. the derived PR interval stream, which captures pulse-to-pulse timing
-3. the downstream summaries, which describe pulse timing variability, spectral organization, and optional amplitude-related burden
+3. the downstream summaries, which describe pulse timing variability and spectral organization
 
 Accordingly, the reported HR and PRV measures in this repository should be interpreted as PAT-derived vascular pulse metrics rather than ECG-derived cardiac interval metrics.
 
@@ -27,8 +27,6 @@ The current `FEATURES` configuration is:
 - `hr = True`
 - `prv = True`
 - `psd = False`
-- `delta_hr = False`
-- `pat_burden = False`
 - `sleep_combo_summary = True`
 - `report_pdf = True`
 - `peaks_debug_pdf = False`
@@ -41,7 +39,8 @@ This means the current run produces:
 - sleep-subset comparison summaries
 - the main PDF report
 - a publication-style PRV PNG export
-- a PAT peaks debug PDF
+
+The separate PAT peaks debug PDF feature is disabled in the current configuration.
 
 The current sleep-stage policy is:
 
@@ -100,17 +99,15 @@ For each EDF file, the processing order is:
 
 1. Read the PAT channel from EDF.
 2. Band-pass filter the PAT waveform.
-3. Optionally load PAT amplitude if burden analysis is enabled.
-4. Load and normalize the auxiliary CSV.
-5. Compute sleep-subset summaries.
-6. Compute PAT burden if enabled.
-7. Compute PAT-derived HR.
-8. Compute PRV and PR-based summaries.
-9. Compute separate PSD features if enabled.
-10. Export per-feature CSVs.
-11. Build the PDF report.
-12. Optionally export a publication-style PRV PNG for an automatically selected NREM segment.
-13. Append one row to the grouped summary CSV.
+3. Load and normalize the auxiliary CSV.
+4. Compute sleep-subset summaries.
+5. Compute PAT-derived HR.
+6. Compute PRV and PR-based summaries.
+7. Compute separate PSD features if enabled.
+8. Export per-feature CSVs.
+9. Build the PDF report.
+10. Optionally export a publication-style PRV PNG for an automatically selected NREM segment.
+11. Append one row to the grouped summary CSV.
 
 In compact form, the physiological flow is:
 
@@ -184,12 +181,12 @@ This produces the shared physiologically cleaned PR series used by HR and PRV.
 
 The main selected-policy analysis currently uses:
 
-- `all_sleep_incluidng_wake = {0, 1, 2, 3}`
+- `nrem_only = {1, 2}`
 
 This means:
 
-- included: wake, light sleep, deep sleep, and REM
-- excluded: none at the sleep-stage level
+- included: light sleep and deep sleep
+- excluded: wake and REM at the sleep-stage level
 
 ### How sleep-stage masking is applied
 
@@ -224,14 +221,14 @@ The signal-quality component of this exclusion logic is important because the do
 - `evt_central_3`
 - `evt_obstructive_3`
 - `evt_unclassified_3`
-- `exclude_hr_flag`
-- `exclude_pat_flag`
 
 The desaturation flag is not used as a standalone fixed exclusion column. Instead, desaturations are used through gated desaturation windows, described below.
 
+The auxiliary quality columns `exclude_hr_flag` and `exclude_pat_flag` are mapped and available, but they are not active exclusion columns in the current configuration.
+
 ### Fixed event padding
 
-For active exclusion events and quality flags, the current fixed exclusion window is:
+For active exclusion events, the current fixed exclusion window is:
 
 - pre-event padding: `15 s`
 - post-event padding: `30 s`
@@ -245,7 +242,7 @@ This means that each flagged event time removes the interval:
 Internally, the exclusion columns are split into:
 
 - apnea/event columns: all `evt_*`
-- quality columns: all `exclude_*`
+- quality columns: all active `exclude_*` entries, if any are configured
 
 The code builds:
 
@@ -284,7 +281,7 @@ For time-grid or PR-midpoint analyses, the final selected-policy keep mask is:
 Therefore a sample is kept only if:
 
 1. it belongs to the selected sleep stages
-2. it is outside the padded event windows from respiratory events and quality flags
+2. it is outside the padded event windows from the active respiratory-event columns
 3. it is outside any active gated desaturation windows
 
 ## PAT-Derived HR Calculation
@@ -510,10 +507,8 @@ For each subset, the code can produce:
 - HF mean
 - LF/HF mean
 
-In the current setup, because `delta_hr`, `pat_burden`, and `psd` are disabled:
+In the current setup, because `psd` is disabled:
 
-- event-response columns are absent
-- PAT burden columns are absent
 - PSD-window-count columns are absent
 
 ## What “Pre-Final Exclusion” Means
@@ -561,8 +556,8 @@ For the current configuration, the main selected-policy PRV workflow can be summ
 5. Keep only physiologic PR intervals between `0.30 and 2.50 s`.
 6. Apply low-level PR cleaning using median-based outlier rejection, gap rejection, jump rejection, alternans rejection, and a minimum artifact-free run length of `3`.
 7. Read the auxiliary CSV and convert sleep stages into numeric stage codes.
-8. Build the selected sleep-stage mask using `all_sleep_incluidng_wake = {0, 1, 2, 3}`.
-9. Build event and quality exclusion windows from respiratory event flags and `Exclude HR` / `Exclude PAT` flags using `15 s` pre-padding and `30 s` post-padding.
+8. Build the selected sleep-stage mask using `nrem_only = {1, 2}`.
+9. Build event exclusion windows from active respiratory event flags using `15 s` pre-padding and `30 s` post-padding.
 10. Build event-gated desaturation windows using the desaturation flag, `15 s` start padding, `30 s` end padding, and minimum run length `5 s`.
 11. Combine sleep, event, quality, and gated-desaturation masks into the final selected-policy keep mask.
 12. Derive PAT HR from the cleaned PR stream, interpolate to `1 Hz`, smooth, despike, and apply the final selected-policy mask.

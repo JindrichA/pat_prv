@@ -236,8 +236,8 @@ def compute_sleep_hours_from_aux(
     """
     Estimate included sleep hours directly from the aux stage timeline.
 
-    This is useful for summaries that should report sleep hours even when other
-    features such as PAT burden are disabled.
+    This is useful for summaries that should report sleep hours independently of
+    metric-specific validity.
     """
     if aux_df is None:
         return float("nan")

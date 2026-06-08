@@ -10,11 +10,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 from .. import features
 from ..metrics.psd import compute_psd_figures_and_peaks
 from .feature_overview_builders import (
-    _build_event_response_overview_figure,
     _build_hr_overview_figure,
     _build_prv_rmssd_overview_figure,
     _build_multi_series_overview_figure,
-    _build_pat_burden_overview_figure,
     _build_single_series_overview_figure,
 )
 from .figures_prv import _build_stagegram_and_prv_tv_figure
@@ -81,8 +79,6 @@ def _build_summary_pages_for_enabled_features(
     prv_tv,
     prv_summary,
     psd_features,
-    pat_burden,
-    pat_burden_diag,
     sleep_combo_summaries,
     prv_mask_info,
     prv_midpoint_halves,
@@ -105,8 +101,6 @@ def _build_summary_pages_for_enabled_features(
         prv_raw=prv_rmssd_raw,
         prv_tv=prv_tv,
         psd_features=psd_features,
-        pat_burden=pat_burden,
-        pat_burden_diag=pat_burden_diag,
         sleep_combo_summaries=sleep_combo_summaries,
         prv_mask_info=prv_mask_info,
         prv_midpoint_halves=prv_midpoint_halves,
@@ -178,8 +172,6 @@ def _build_feature_overview_figures(
     prv_rmssd_raw,
     prv_tv,
     prv_mask_info,
-    t_pat_amp,
-    pat_amp,
 ) -> list[Any]:
     figs: list[Any] = []
 
@@ -269,32 +261,6 @@ def _build_feature_overview_figures(
             if fig is not None:
                 figs.append(fig)
 
-    if features.is_enabled("delta_hr"):
-        fig = _build_event_response_overview_figure(
-            edf_base=edf_base,
-            t_hr=t_hr_calc,
-            hr_raw=hr_calc_raw,
-            aux_df=aux_df,
-            exclusion_zones=exclusion_zones,
-            duration_sec_fallback=duration_sec,
-            event_spec=event_spec,
-        )
-        if fig is not None:
-            figs.append(fig)
-
-    if features.is_enabled("pat_burden"):
-        fig = _build_pat_burden_overview_figure(
-            edf_base=edf_base,
-            t_pat_amp=t_pat_amp,
-            pat_amp=pat_amp,
-            aux_df=aux_df,
-            exclusion_zones=exclusion_zones,
-            duration_sec_fallback=duration_sec,
-            event_spec=event_spec,
-        )
-        if fig is not None:
-            figs.append(fig)
-
     return figs
 
 
@@ -315,14 +281,10 @@ def _build_report_figures(
     prv_tv,
     prv_summary,
     aux_df,
-    pat_burden,
-    pat_burden_diag,
     sleep_combo_summaries,
     prv_mask_info,
     prv_midpoint_halves,
     hr_calc_raw,
-    t_pat_amp,
-    pat_amp,
 ):
     summary_pages = _build_summary_pages_for_enabled_features(
         edf_base=edf_base,
@@ -337,8 +299,6 @@ def _build_report_figures(
         prv_tv=prv_tv,
         prv_summary=prv_summary,
         psd_features=psd_features,
-        pat_burden=pat_burden,
-        pat_burden_diag=pat_burden_diag,
         sleep_combo_summaries=sleep_combo_summaries,
         prv_mask_info=prv_mask_info,
         prv_midpoint_halves=prv_midpoint_halves,
@@ -375,8 +335,6 @@ def _build_report_figures(
         prv_rmssd_raw=prv_rmssd_raw,
         prv_tv=prv_tv,
         prv_mask_info=prv_mask_info,
-        t_pat_amp=t_pat_amp,
-        pat_amp=pat_amp,
     )
 
     return {

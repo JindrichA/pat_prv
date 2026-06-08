@@ -8,9 +8,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter
 
 from .. import config, masking, sleep_mask
-from ..metrics.hr_event_response import extract_event_hr_windows
 from .prv_plot_utils import _add_colored_event_key, _overlay_events_on_single_axis_whole_night, _shade_prv_mask_layers
-from .segment_plot_helpers import _overlay_pat_burden_area
 from .specs import DEFAULT_EVENT_PLOT_SPEC, EventSpec
 from .utils import _add_exclusion_spans, _shade_masked_regions
 
@@ -52,14 +50,6 @@ def _overview_header_text(title: str) -> str:
     elif title == "HR Overview":
         parts.append(
             f"HR uses PAT-derived PR extraction and current HR settings (target fs={float(getattr(config, 'HR_TARGET_FS_HZ', 1.0)):.1f} Hz)."
-        )
-    elif title == "Event-Response HR Overview":
-        parts.append(
-            f"Event-response HR view using smooth={float(getattr(config, 'HR_EVENT_SMOOTH_SEC', 5.0)):.0f}s, event={float(getattr(config, 'HR_EVENT_WINDOW_SEC', 15.0)):.0f}s, recovery end={float(getattr(config, 'HR_EVENT_RECOVERY_END_SEC', 45.0)):.0f}s, desat extension={'ON' if bool(getattr(config, 'HR_EVENT_USE_DESAT_EXTENSION', False)) else 'OFF'}."
-        )
-    elif title == "PAT-Burden Overview":
-        parts.append(
-            "PAT burden shading marks burden area inside excluded event/desaturation regions; calculations still follow burden-specific baseline rules."
         )
     else:
         parts.append("Event markers use the current plotting and masking configuration.")
@@ -128,21 +118,6 @@ def _overview_header_legend(title: str) -> list[Line2D]:
         if show_raw_debug:
             handles.insert(0, Line2D([0], [0], color="tab:gray", linewidth=0.7, alpha=0.6, label="Pre-final-exclusion LF/HF"))
         return handles
-    if title == "Event-Response HR Overview":
-        return [
-            Line2D([0], [0], color="tab:blue", linewidth=1.0, alpha=0.7, label="HR raw"),
-            Line2D([0], [0], color="tab:cyan", linewidth=6, alpha=0.12, label="Event window"),
-            Line2D([0], [0], color="tab:green", linewidth=6, alpha=0.10, label="Recovery window"),
-            Line2D([0], [0], color="0.35", linestyle="--", linewidth=1.0, label="Event mean"),
-            Line2D([0], [0], color="black", marker="v", linestyle="None", label="Event minimum"),
-            Line2D([0], [0], color="tab:red", marker="o", linestyle="None", label="Recovery maximum"),
-        ]
-    if title == "PAT-Burden Overview":
-        return [
-            Line2D([0], [0], color="tab:orange", linewidth=1.1, label="PAT AMP"),
-            Line2D([0], [0], color="0.25", linestyle="--", linewidth=1.1, label="Local burden baseline"),
-            Line2D([0], [0], color="tab:red", linewidth=6, alpha=0.22, label="Burden area shading"),
-        ]
     return []
 
 
@@ -505,105 +480,3 @@ def _build_multi_series_overview_figure(
 
     return _finalize_overview_figure(fig, axes, ylabel)
 
-
-def _build_event_response_overview_figure(
-    edf_base: str,
-    t_hr: Optional[np.ndarray],
-    hr_raw: Optional[np.ndarray],
-    *,
-    aux_df: Optional["pd.DataFrame"],
-    exclusion_zones,
-    duration_sec_fallback: float,
-    event_spec: Sequence[EventSpec] = DEFAULT_EVENT_PLOT_SPEC,
-) -> Optional[Any]:
-    show_raw_debug = bool(getattr(config, "PLOT_SHOW_RAW_DEBUG_OVERLAYS", False))
-    if (not show_raw_debug) or t_hr is None or hr_raw is None or np.size(t_hr) == 0 or np.size(hr_raw) != np.size(t_hr):
-        return None
-
-    bounds = _panel_bounds(np.asarray(t_hr), duration_sec_fallback)
-    title = "Event-Response HR Overview"
-    fig, axes = _init_overview_figure(edf_base, title, len(bounds))
-    _decorate_overview_figure(fig, title)
-    _add_colored_event_key(fig, list(event_spec))
-
-    include_set = set(config.sleep_include_numeric()) if getattr(config, "ENABLE_SLEEP_STAGE_MASKING", False) else None
-    windows = extract_event_hr_windows(np.asarray(t_hr), np.asarray(hr_raw, dtype=float), aux_df, include_set=include_set) if aux_df is not None else []
-
-    for idx, (ax, (start_sec, end_sec)) in enumerate(zip(axes, bounds)):
-        _prepare_panel(ax, start_sec, end_sec, exclusion_zones, aux_df, event_spec)
-        mask = (t_hr >= start_sec) & (t_hr <= end_sec)
-        if not np.any(mask):
-            continue
-        th = np.asarray(t_hr)[mask] / 3600.0
-        yy = np.asarray(hr_raw)[mask].astype(float)
-        if np.any(np.isfinite(yy)):
-            ax.plot(th, np.ma.masked_invalid(yy), linewidth=1.0, color="tab:blue", alpha=0.7, label="HR raw", zorder=2)
-
-        used_windows = 0
-        for w in windows:
-            if w["event_end_t"] < start_sec or w["event_start_t"] > end_sec:
-                continue
-            used_windows += 1
-            ax.axvspan(w["event_start_t"] / 3600.0, w["event_end_t"] / 3600.0, color="tab:cyan", alpha=0.12, label="Event window" if used_windows == 1 and idx == 0 else "_nolegend_", zorder=0)
-            ax.axvspan(w["recovery_start_t"] / 3600.0, w["recovery_end_t"] / 3600.0, color="tab:green", alpha=0.10, label="Recovery window" if used_windows == 1 and idx == 0 else "_nolegend_", zorder=0)
-            ax.plot(
-                [w["event_start_t"] / 3600.0, w["event_end_t"] / 3600.0],
-                [w["event_mean_hr"], w["event_mean_hr"]],
-                linestyle="--",
-                linewidth=0.9,
-                color="0.35",
-                alpha=0.8,
-                label="Event mean" if used_windows == 1 and idx == 0 else "_nolegend_",
-                zorder=1,
-            )
-            if np.isfinite(w["event_min_t"]) and np.isfinite(w["event_min_hr"]):
-                ax.scatter(w["event_min_t"] / 3600.0, w["event_min_hr"], color="black", s=12, marker="v", zorder=4, label="Event minimum" if used_windows == 1 and idx == 0 else "_nolegend_")
-            if np.isfinite(w["recovery_max_t"]) and np.isfinite(w["recovery_max_hr"]):
-                ax.scatter(w["recovery_max_t"] / 3600.0, w["recovery_max_hr"], color="tab:red", s=16, zorder=4, label="Recovery maximum" if used_windows == 1 and idx == 0 else "_nolegend_")
-
-        if idx == 0:
-            handles, labels = ax.get_legend_handles_labels()
-            if handles:
-                ax.legend(loc="lower right", fontsize=5)
-
-    return _finalize_overview_figure(fig, axes, "Event HR [bpm]")
-
-
-def _build_pat_burden_overview_figure(
-    edf_base: str,
-    t_pat_amp: Optional[np.ndarray],
-    pat_amp: Optional[np.ndarray],
-    aux_df: Optional["pd.DataFrame"],
-    exclusion_zones,
-    duration_sec_fallback: float,
-    event_spec: Sequence[EventSpec] = DEFAULT_EVENT_PLOT_SPEC,
-) -> Optional[Any]:
-    if t_pat_amp is None or pat_amp is None or np.size(t_pat_amp) == 0 or np.size(t_pat_amp) != np.size(pat_amp):
-        return None
-
-    bounds = _panel_bounds(np.asarray(t_pat_amp), duration_sec_fallback)
-    title = "PAT-Burden Overview"
-    fig, axes = _init_overview_figure(edf_base, title, len(bounds))
-    _decorate_overview_figure(fig, title)
-    _add_colored_event_key(fig, list(event_spec))
-
-    for idx, (ax, (start_sec, end_sec)) in enumerate(zip(axes, bounds)):
-        _prepare_panel(ax, start_sec, end_sec, exclusion_zones, aux_df, event_spec)
-        mask = (t_pat_amp >= start_sec) & (t_pat_amp <= end_sec)
-        if not np.any(mask):
-            continue
-        t_panel = np.asarray(t_pat_amp)[mask]
-        y_panel = np.asarray(pat_amp)[mask].astype(float)
-        if aux_df is not None:
-            m_keep = sleep_mask.build_global_include_mask_for_times(t_panel, aux_df, apply_sleep=True, apply_events=True)
-            if m_keep is not None:
-                _shade_masked_regions(ax, t_sec=t_panel, masked=~m_keep, color="0.6", alpha=0.18)
-        if np.any(np.isfinite(y_panel)):
-            ax.plot(t_panel / 3600.0, np.ma.masked_invalid(y_panel), linewidth=1.1, color="tab:orange", alpha=0.9, label="PAT AMP", zorder=3)
-            _overlay_pat_burden_area(ax, t_sec_all=np.asarray(t_pat_amp), pat_amp_all=np.asarray(pat_amp), aux_df=aux_df, seg_start_sec=start_sec, seg_end_sec=end_sec)
-        if idx == 0:
-            handles, labels = ax.get_legend_handles_labels()
-            if handles:
-                ax.legend(loc="lower right", fontsize=5)
-
-    return _finalize_overview_figure(fig, axes, "PAT AMP")

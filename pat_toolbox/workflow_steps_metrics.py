@@ -8,9 +8,7 @@ from .context import RecordingContext
 from .io_aux_csv import compute_sleep_timing_from_aux
 from .metrics import hr as hr_metrics
 from .metrics import prv as prv_metrics
-from .metrics import pat_burden as pat_burden_metrics
 from .metrics import psd as psd_metrics
-from .metrics.hr_event_response import summarize_event_hr_response
 
 
 def _hr_summary_for_subset(
@@ -70,25 +68,6 @@ def _compute_single_sleep_combo_summary(
     if features.is_enabled("psd"):
         psd_features = psd_metrics.compute_psd_features_from_pr(pr_mid, pr_ms, duration_sec, aux_df, include_set=include_set)
 
-    burden = np.nan
-    burden_diag = None
-    if features.is_enabled("pat_burden") and ctx.t_pat_amp is not None and ctx.pat_amp is not None and aux_df is not None:
-        burden, burden_diag, _episodes = pat_burden_metrics.compute_pat_burden_from_pat_amp(
-            t_sec=ctx.t_pat_amp,
-            pat_amp=ctx.pat_amp,
-            aux_df=aux_df,
-            include_set=include_set,
-        )
-
-    hr_event_response_summary = None
-    if features.is_enabled("delta_hr") and t_hr_subset is not None and hr_raw_subset is not None and aux_df is not None:
-        hr_event_response_summary = summarize_event_hr_response(
-            t_hr_subset,
-            hr_raw_subset,
-            aux_df,
-            include_set=include_set,
-        )
-
     return {
         "label": label,
         "include_set": set(include_set),
@@ -96,42 +75,14 @@ def _compute_single_sleep_combo_summary(
         "hr_summary": hr_summary,
         "prv_summary": prv_summary,
         "psd_features": psd_features,
-        "hr_event_response_summary": hr_event_response_summary,
-        "pat_burden": burden,
-        "pat_burden_diag": burden_diag,
     }
-
-
-def compute_pat_burden_step(ctx: RecordingContext) -> None:
-    if not features.is_enabled("pat_burden"):
-        ctx.pat_burden = None
-        ctx.pat_burden_diag = None
-        ctx.pat_burden_episodes = None
-        return
-    if ctx.aux_df is None or ctx.t_pat_amp is None or ctx.pat_amp is None:
-        ctx.pat_burden = None
-        ctx.pat_burden_diag = {"reason": "missing_aux_or_pat_amp"}
-        ctx.pat_burden_episodes = None
-        return
-    try:
-        val, diag, eps = pat_burden_metrics.compute_pat_burden_from_pat_amp(t_sec=ctx.t_pat_amp, pat_amp=ctx.pat_amp, aux_df=ctx.aux_df)
-        ctx.pat_burden = val
-        ctx.pat_burden_diag = diag
-        ctx.pat_burden_episodes = eps
-        if val is not None and np.isfinite(val):
-            unit = "rel·min/h" if diag.get("relative") else "amp·min/h"
-            print(f"  PAT burden (event+desat): {val:.3f} {unit} (episodes_used={diag.get('n_episodes_used')})")
-    except Exception as e:
-        ctx.pat_burden = None
-        ctx.pat_burden_diag = {"reason": "exception", "error": str(e)}
-        ctx.pat_burden_episodes = None
 
 
 def compute_sleep_combo_summaries_step(ctx: RecordingContext) -> None:
     ctx.sleep_combo_summaries = None
     if not features.is_enabled("sleep_combo_summary"):
         return
-    if not features.any_enabled("hr", "prv", "psd", "delta_hr", "pat_burden"):
+    if not features.any_enabled("hr", "prv", "psd"):
         return
     if ctx.view_pat is None or ctx.sfreq is None or ctx.sfreq <= 0:
         return
@@ -147,7 +98,7 @@ def compute_sleep_combo_summaries_step(ctx: RecordingContext) -> None:
     summaries: dict[str, dict[str, object]] = {}
     t_hr_subset = None
     hr_raw_subset = None
-    if features.any_enabled("hr", "delta_hr"):
+    if features.is_enabled("hr"):
         try:
             t_hr_subset, hr_raw_subset = hr_metrics.compute_hr_from_pat_signal(ctx.view_pat, fs=ctx.sfreq)
         except Exception:
