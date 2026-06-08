@@ -135,9 +135,7 @@ In short: PAT drives the PR series, PR drives HR/PRV/PSD, aux data drives maskin
 |  |- boxplots_AHI_groups.py
 |  `- check_edf_integrity.py
 |- experiments/
-|  |- analysis_deltaHR.py
-|  |- merge_tables.py
-|  `- plot_all_data_statistics.py
+|  `- merge_tables.py
 `- pat_toolbox/
    |- __init__.py
    |- config.py
@@ -520,7 +518,7 @@ In most cases, the only required edits before the first run are:
 ```bash
 python3 analysis/boxplots_AHI.py
 python3 analysis/boxplots_AHI_groups.py
-python3 experiments/analysis_deltaHR.py
+python3 analysis/check_edf_integrity.py
 ```
 
 Run everything from the repository root.
