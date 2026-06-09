@@ -24,6 +24,8 @@ The main feature switches live in `pat_toolbox/config.py` under `FEATURES`.
 
 Separate from `FEATURES`, `EXPORT_PUBLICATION_PRV_PNG` can export a high-resolution PRV figure for a selected NREM segment.
 
+PWA-drop detection and pulse-wave-amplitude drop summaries are outside the current branch scope.
+
 ## Core Signal Flow
 
 1. Read `VIEW_PAT`.
@@ -101,7 +103,7 @@ Typical outputs for one recording are conditional on the active switches in `pat
 - PRV mask CSV: `__PRV_Mask_1Hz.csv`
 - Sleep timing CSV: `__Sleep_Timing.csv`
 - Multi-page PDF report
-- Publication-style PRV PNG: `__publication_prv_nrem_10min.png`
+- Publication-style PRV PNG: `__publication_prv_nrem_<segment>min.png`
 - Grouped final summary CSV with one row per recording
 
 ## Current Scope

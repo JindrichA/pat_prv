@@ -295,8 +295,6 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
     hr_summary: Dict[str, Any] = hr_summary_obj if isinstance(hr_summary_obj, dict) else {}
     prv_summary_obj = item.get("prv_summary")
     prv_summary: Dict[str, Any] = prv_summary_obj if isinstance(prv_summary_obj, dict) else {}
-    pwa_drop_obj = item.get("pwa_drop_summary")
-    pwa_drop: Dict[str, Any] = pwa_drop_obj if isinstance(pwa_drop_obj, dict) else {}
 
     core_primary = [f"{sleep_hours} h"]
     if features.is_enabled("hr"):
@@ -324,14 +322,7 @@ def _sleep_combo_row_values(item: Dict[str, Any]) -> tuple[str, list[str], list[
             f"{_fmt(prv_summary.get('lf_hf'), 2)}",
         ])
 
-    right: list[str] = []
-    if features.is_enabled("pwa_drop"):
-        right.extend([
-            _fmt_int(pwa_drop.get("n_drops")),
-            _fmt(pwa_drop.get("drop_rate_per_sleep_hour"), 2),
-            _fmt(pwa_drop.get("mean_amplitude_pct"), 1),
-        ])
-    return label, core_primary, core_secondary, right
+    return label, core_primary, core_secondary, []
 
 
 def _sleep_combo_tables(sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]]) -> tuple[list[list[str]], list[list[str]], list[list[str]]]:
@@ -348,13 +339,9 @@ def _sleep_combo_tables(sleep_combo_summaries: Optional[Dict[str, Dict[str, obje
     if features.is_enabled("prv"):
         secondary_headers.extend(["SDNN mean", "SDNN med", "RMSSD valid\n[min]", "RMSSD valid\n[%]", "SDNN valid\n[min]", "SDNN valid\n[%]", "LF mean\n[ms^2]", "HF mean\n[ms^2]", "LF/HF mean\n[-]"])
 
-    right_headers = ["Subset"]
-    if features.is_enabled("pwa_drop"):
-        right_headers.extend(["PWA n", "PWA /h", "PWA amp %"])
-
     primary_rows: list[list[str]] = [primary_headers]
     secondary_rows: list[list[str]] = [secondary_headers] if len(secondary_headers) > 1 else []
-    right_rows: list[list[str]] = [right_headers] if len(right_headers) > 1 else []
+    right_rows: list[list[str]] = []
 
     for key in ["pre_sleep_wake", "all_sleep", "wake_sleep", "nrem", "deep", "rem"]:
         item_obj = sleep_combo_summaries.get(key)
@@ -512,7 +499,6 @@ def _build_quality_rows(
 
 def _build_time_series_feature_rows(
     prv_summary: Optional[Dict[str, float]],
-    pwa_drop_summary: Optional[Dict[str, float]] = None,
 ) -> List[List[str]]:
     rows: List[List[str]] = []
     if features.is_enabled("prv"):
@@ -522,20 +508,6 @@ def _build_time_series_feature_rows(
         sdnn_mean = prv_summary.get("sdnn_mean") if prv_summary else None
         sdnn_median = prv_summary.get("sdnn_median") if prv_summary else None
         rows += [["Selected-policy time-series features", ""], ["  RMSSD mean [ms]", _fmt(rmssd_mean, 2)], ["  RMSSD median [ms]", _fmt(rmssd_median, 2)], ["  SDNN mean [ms]", _fmt(sdnn_mean, 2)], ["  SDNN median [ms]", _fmt(sdnn_median, 2)]]
-    if features.is_enabled("pwa_drop"):
-        if rows:
-            rows += [["", ""]]
-        item = pwa_drop_summary if isinstance(pwa_drop_summary, dict) else {}
-        rows += [
-            ["Selected-policy PWA-drop", ""],
-            ["  Detected drops [n]", _fmt_int(item.get("n_drops"))],
-            ["  Drop rate [/sleep h]", _fmt(item.get("drop_rate_per_sleep_hour"), 2)],
-            ["  Mean amplitude [%]", _fmt(item.get("mean_amplitude_pct"), 2)],
-            ["  Mean duration [s]", _fmt(item.get("mean_duration_sec"), 2)],
-            ["  Mean AUC [%·s]", _fmt(item.get("mean_auc_pct_sec"), 2)],
-            ["  Event-overlap drops [n]", _fmt_int(item.get("n_drops_event_overlap"))],
-            ["  Event-overlap drops [%]", _fmt(item.get("event_overlap_pct"), 2)],
-        ]
     return rows
 
 
@@ -816,7 +788,6 @@ def build_summary_pages(
     prv_clean: Optional[np.ndarray] = None,
     prv_raw: Optional[np.ndarray] = None,
     prv_tv: Optional[Dict[str, np.ndarray]] = None,
-    pwa_drop_summary: Optional[Dict[str, float]] = None,
     sleep_combo_summaries: Optional[Dict[str, Dict[str, object]]] = None,
     prv_mask_info: Optional[Dict[str, object]] = None,
     prv_midpoint_halves: Optional[Dict[str, Dict[str, float]]] = None,
@@ -827,14 +798,14 @@ def build_summary_pages(
     t_hr_edf = None
     hr_edf = None
     figs = []
-    has_aux_summary_context = features.any_enabled("prv", "pwa_drop", "sleep_combo_summary")
+    has_aux_summary_context = features.any_enabled("prv", "sleep_combo_summary")
 
     rows_hr_quality, rows_ts_coverage, rows_spectral_coverage = _build_quality_rows(t_hr_calc, hr_calc, t_prv, prv_clean, prv_raw, prv_tv)
 
     if rows_hr_quality:
         figs.append(_render_table_page("Summary (Selected-Policy HR & Coverage)", rows_hr_quality, edf_base=edf_base, font_size=12, scale_y=1.55))
 
-    rows_ts_features = _build_time_series_feature_rows(prv_summary, pwa_drop_summary)
+    rows_ts_features = _build_time_series_feature_rows(prv_summary)
     if rows_ts_features:
         figs.append(_render_table_page("Summary (Selected-Policy Time-Series Features)", rows_ts_features, edf_base=edf_base, font_size=12, scale_y=1.35))
 

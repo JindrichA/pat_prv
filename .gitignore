@@ -7,3 +7,8 @@ __pycache__/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Local agent/task files
+.beads/
+AGENTS.md
+REFACTOR.md

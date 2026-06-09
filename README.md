@@ -27,7 +27,7 @@ For a first-time reader, it is helpful to think of the pipeline in three layers:
 3. `derived summaries`
    - HR, PRV, and spectral PRV measures
 
-This means that the report pages and CSV outputs are not abstract signal-processing products only. They are intended to describe how vascular pulse timing and amplitude vary across the night and across different sleep or event conditions.
+This means that the report pages and CSV outputs are not abstract signal-processing products only. They are intended to describe how vascular pulse timing varies across the night and across different sleep or event conditions.
 
 ## Start Here
 
@@ -354,7 +354,7 @@ The pipeline expects the main PAT channel configured as:
 
 ### Optional EDF channels
 
-When present, these may be used in selected metrics or reports:
+The current HR+PRV workflow is driven by `VIEW_PAT`. These channel names remain configurable for compatibility and selected debug/report contexts, but they are not required for the main HR+PRV calculations:
 
 - `DERIVED_HR`
 - `ACTIGRAPH`
@@ -505,6 +505,8 @@ Typical outputs include:
 - per-run PDF reports
 - HR CSV outputs
 - PRV CSV outputs
+- PRV mask CSV outputs
+- sleep timing CSV outputs when aux CSV data are available
 - optional PAT peak debug PDFs
 - optional publication-style PRV PNG figures
 - appended summary CSV rows

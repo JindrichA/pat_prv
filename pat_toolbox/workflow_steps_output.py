@@ -111,7 +111,8 @@ def build_publication_prv_png_step(ctx: RecordingContext) -> None:
         if ctx.publication_prv_png_path is not None:
             print(f"  Saved publication PRV PNG to: {ctx.publication_prv_png_path}")
         else:
-            print(f"  WARNING: no valid 10 min NREM segment found for publication PNG in {ctx.edf_path.name}")
+            segment_min = float(getattr(config, "PUBLICATION_PRV_SEGMENT_MIN_SEC", 600.0)) / 60.0
+            print(f"  WARNING: no valid {segment_min:g} min NREM segment found for publication PNG in {ctx.edf_path.name}")
     except Exception as e:
         ctx.publication_prv_png_path = None
         print(f"  WARNING: could not create publication PRV PNG for {ctx.edf_path.name}: {e}")

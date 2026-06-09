@@ -24,7 +24,6 @@ def append_hr_prv_summary(
     prv_mask_info: Optional[Dict[str, object]] = None,
     prv_midpoint_halves: Optional[Dict[str, Dict[str, float]]] = None,
     aux_df: Optional[Any] = None,
-    pwa_drop_summary: Optional[Dict[str, float]] = None,
     sleep_combo_summaries: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Path:
     """

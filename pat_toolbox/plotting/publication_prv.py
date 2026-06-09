@@ -484,19 +484,21 @@ def save_publication_prv_png(
     ax_ratio.grid(True, alpha=0.35)
     ax_ratio.set_xlim(0.0, max(0.0, (end_sec - start_sec) / 60.0))
 
-    fig.suptitle(f"{edf_base} - Representative 10 min NREM PAT/PRV Segment", fontsize=14, y=0.995)
+    segment_min = (end_sec - start_sec) / 60.0
+    segment_min_label = f"{segment_min:g}min"
+    fig.suptitle(f"{edf_base} - Representative {segment_min:g} min NREM PAT/PRV Segment", fontsize=14, y=0.995)
     fig.text(
         0.5,
         0.975,
-        f"From the original 40 Hz PAT waveform. Segment selected automatically as the highest-coverage contiguous {((end_sec - start_sec) / 60.0):.0f} min NREM interval. {'The PAT panel includes an inset peak-detection zoom. ' if bool(getattr(config, 'PUBLICATION_PRV_SHOW_PEAK_ZOOM', True)) and (end_sec - start_sec) > float(getattr(config, 'PUBLICATION_PRV_PEAK_ZOOM_SEC', 20.0)) else ''}RMSSD/SDNN are shown as native overlapping sliding-window estimates; LF, HF, and LF/HF are shown as native fixed-window estimates.",
+        f"From the original {float(sfreq):g} Hz PAT waveform. Segment selected automatically as the highest-coverage contiguous {segment_min:g} min NREM interval. {'The PAT panel includes an inset peak-detection zoom. ' if bool(getattr(config, 'PUBLICATION_PRV_SHOW_PEAK_ZOOM', True)) and (end_sec - start_sec) > float(getattr(config, 'PUBLICATION_PRV_PEAK_ZOOM_SEC', 20.0)) else ''}RMSSD/SDNN are shown as native overlapping sliding-window estimates; LF, HF, and LF/HF are shown as native fixed-window estimates.",
         ha="center",
         va="top",
         fontsize=9,
     )
-    fig.tight_layout(rect=(0.05, 0.04, 0.98, 0.95))
+    fig.subplots_adjust(left=0.08, right=0.98, bottom=0.05, top=0.94, hspace=0.22)
 
     out_folder = paths.get_output_folder(getattr(config, "PUBLICATION_PRV_OUTPUT_SUBFOLDER"))
-    png_path = out_folder / f"{edf_base}__publication_prv_nrem_10min.png"
+    png_path = out_folder / f"{edf_base}__publication_prv_nrem_{segment_min_label}.png"
     dpi = int(getattr(config, "PUBLICATION_PRV_DPI", 600))
     fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)

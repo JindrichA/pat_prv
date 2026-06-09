@@ -41,6 +41,15 @@ This means the current run produces:
 
 The separate PAT peaks debug PDF feature is disabled in the current configuration.
 
+PWA-drop detection and pulse-wave-amplitude drop summaries are not part of the current branch or active methods scope.
+
+The publication-style PRV PNG export is enabled separately from `FEATURES` with:
+
+- `PUBLICATION_PRV_SEGMENT_MIN_SEC = 180 s` (`3 min`)
+- candidate-window step: `30 s`
+- output resolution: `300 dpi`
+- PAT peak zoom inset: enabled, using a `20 s` zoom window
+
 The current sleep-stage policy is:
 
 - `SLEEP_STAGE_POLICY = "nrem_only"`
@@ -212,7 +221,7 @@ These are separate summaries, not alternative masks applied to the main selected
 
 After sleep-stage selection, the code applies event and quality exclusions using the auxiliary CSV.
 
-The signal-quality component of this exclusion logic is important because the downstream timing and spectral metrics are only meaningful when the underlying PAT pulse train is interpretable. In practice, the auxiliary quality flags (`Exclude HR`, `Exclude PAT`) are treated conservatively: when they are active, the surrounding interval is removed with the same padded window logic used for respiratory event exclusions. This is done to reduce contamination from motion, signal dropout, poor pulse definition, or other waveform conditions that can distort peak detection, corrupt PR intervals, and propagate implausible values into HR, PRV, or spectral estimates.
+The signal-quality component of this exclusion logic is important because the downstream timing and spectral metrics are only meaningful when the underlying PAT pulse train is interpretable. Auxiliary quality flags (`Exclude HR`, `Exclude PAT`) are mapped and available, but they are not active exclusion columns in the current configuration. If they are added to `PRV_EXCLUSION_EVENT_COLUMNS`, the surrounding interval is removed with the same padded window logic used for respiratory event exclusions. This is done to reduce contamination from motion, signal dropout, poor pulse definition, or other waveform conditions that can distort peak detection, corrupt PR intervals, and propagate implausible values into HR, PRV, or spectral estimates.
 
 ### Active exclusion columns in the current configuration
 
@@ -471,7 +480,7 @@ In the current midpoint-half PRV comparison:
 - the NREM PR stream is cut into first and second halves relative to the sleep midpoint
 - each half is then summarized with the same selected-policy PRV summary engine
 
-This NREM-restricted midpoint analysis is a secondary comparison only. It does not mean that the main selected-policy analysis is currently NREM-only.
+This NREM-restricted midpoint analysis is a secondary comparison. In the present configuration the main selected-policy analysis is also NREM-only (`nrem_only = {1, 2}`). The distinction is that the midpoint-half table always performs its own NREM first-half versus second-half comparison relative to sleep midpoint, whereas the main selected-policy outputs follow whatever `SLEEP_STAGE_POLICY` is configured to use.
 
 This is why the comparison table is labeled:
 
